@@ -19,12 +19,12 @@ struct SnakeCell {
 
 static int MAX_X;
 static int MAX_Y;
-static WINDOW *game_win;
-static WINDOW *status_win;
+static WINDOW *GAME_WIN;
+static WINDOW *STATUS_WIN;
 
 void print_points(int const points) {
-	mvwprintw(status_win, 1, MAX_X / 2 - 10, "Points: \t%d", points);
-	wrefresh(status_win);
+	mvwprintw(STATUS_WIN, 1, MAX_X / 2 - 10, "Points: \t%d", points);
+	wrefresh(STATUS_WIN);
 }
 
 void new_random_coordinates(SnakeCell *test_cell, int *x, int *y) {
@@ -51,10 +51,10 @@ int main(void) {
 	initscr();
 	int SPEED = 150;
 	getmaxyx(stdscr, MAX_Y, MAX_X);
-	game_win = subwin(stdscr, MAX_Y - 3, MAX_X, 0, 0);
-	status_win = subwin(stdscr, 3, MAX_X, MAX_Y - 3, 0);
-	box(status_win, 0, 0);
-	getmaxyx(game_win, MAX_Y, MAX_X);
+	GAME_WIN = subwin(stdscr, MAX_Y - 3, MAX_X, 0, 0);
+	STATUS_WIN = subwin(stdscr, 3, MAX_X, MAX_Y - 3, 0);
+	box(STATUS_WIN, 0, 0);
+	getmaxyx(GAME_WIN, MAX_Y, MAX_X);
 	print_points(0);
 
 	// Init ncurses
@@ -89,7 +89,7 @@ int main(void) {
 	while(TRUE) {
 
 		// Painting the food
-		mvaddch(food_y, food_x, '0');
+		mvwaddch(GAME_WIN, food_y, food_x, '0');
 
 		// Getting input
 		key = getch();
@@ -113,38 +113,38 @@ int main(void) {
 		// character on the coordinate BEFORE changing the coordinate
 		if(direction == UP) {
 			if(old_direction == LEFT) {
-				mvaddch(y,x,ACS_LLCORNER);
+				mvwaddch(GAME_WIN, y,x,ACS_LLCORNER);
 			} else if(old_direction == RIGHT) {
-				mvaddch(y,x,ACS_LRCORNER);
+				mvwaddch(GAME_WIN, y,x,ACS_LRCORNER);
 			} else {
-				mvaddch(y,x,ACS_VLINE);
+				mvwaddch(GAME_WIN, y,x,ACS_VLINE);
 			}
 			y--;
 		}else if(direction == DOWN) {
 			if(old_direction == LEFT) {
-				mvaddch(y,x,ACS_ULCORNER);
+				mvwaddch(GAME_WIN, y,x,ACS_ULCORNER);
 			} else if(old_direction == RIGHT) {
-				mvaddch(y,x,ACS_URCORNER);
+				mvwaddch(GAME_WIN, y,x,ACS_URCORNER);
 			} else {
-				mvaddch(y,x,ACS_VLINE);
+				mvwaddch(GAME_WIN, y,x,ACS_VLINE);
 			}
 			y++;
 		}else if(direction == LEFT) {
 			if(old_direction == UP) {
-				mvaddch(y,x,ACS_URCORNER);
+				mvwaddch(GAME_WIN, y,x,ACS_URCORNER);
 			} else if(old_direction == DOWN) {
-				mvaddch(y,x,ACS_LRCORNER);
+				mvwaddch(GAME_WIN, y,x,ACS_LRCORNER);
 			} else {
-				mvaddch(y,x,ACS_HLINE);
+				mvwaddch(GAME_WIN, y,x,ACS_HLINE);
 			}
 			x--;
 		}else if(direction == RIGHT) {
 			if(old_direction == UP) {
-				mvaddch(y,x,ACS_ULCORNER);
+				mvwaddch(GAME_WIN, y,x,ACS_ULCORNER);
 			} else if(old_direction == DOWN) {
-				mvaddch(y,x,ACS_LLCORNER);
+				mvwaddch(GAME_WIN, y,x,ACS_LLCORNER);
 			} else {
-				mvaddch(y,x,ACS_HLINE);
+				mvwaddch(GAME_WIN, y,x,ACS_HLINE);
 			}
 			x++;
 		}
@@ -161,7 +161,7 @@ int main(void) {
 		}
 
 		// Draw head and create new cell for the head
-		mvaddch(y,x,'X');
+		mvwaddch(GAME_WIN,y,x,'X');
 		SnakeCell *new_cell = malloc(sizeof(SnakeCell));
 		new_cell->x = x;
 		new_cell->y = y;
@@ -199,7 +199,7 @@ int main(void) {
 				last_cell = last_cell->last;
 			}
 			// ...delete the character from the terminal...
-			mvaddch(last_cell->y,last_cell->x,' ');
+			mvwaddch(GAME_WIN, last_cell->y,last_cell->x,' ');
 			// ...and free the memory for this cell.
 			last_cell->next->last = NULL;
 			free(last_cell);
@@ -217,7 +217,8 @@ int main(void) {
 		if(point_timer > 10) {
 			point_timer--;
 		}
-		refresh();
+
+		wrefresh(GAME_WIN);
 	}
 
 	return endwin();
