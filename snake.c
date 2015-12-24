@@ -1,5 +1,6 @@
 #include <ncurses.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #define UP 1
@@ -25,22 +26,22 @@ static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
 
 void print_points() {
-	wclear(STATUS_WIN);
-	box(STATUS_WIN, 0, 0);
-	mvwprintw(STATUS_WIN, 1, MAX_X / 2 - 10, "Points: \t%d", POINTS);
+	mvwprintw(STATUS_WIN, 1, MAX_X / 2 - 4, "Points: %d", POINTS);
 	wrefresh(STATUS_WIN);
 }
 
-void pause() {
-	wclear(STATUS_WIN);
-	box(STATUS_WIN, 0, 0);
-	mvwaddstr(STATUS_WIN, 1, MAX_X / 2 - 7, "--- PAUSED ---");
+void pause(const char string[]) {
+	int i, length = strlen(string);
+	mvwaddstr(STATUS_WIN, 2, MAX_X / 2 - (length / 2), string);
 	wrefresh(STATUS_WIN);
 	// Set getch to 'blocking'-mode
 	timeout(-1);
 	getch();
+	for(i = 1; i<MAX_X; i++) {
+		mvwaddch(STATUS_WIN, 2, i, ' ');
+	}
+	wrefresh(STATUS_WIN);
 	timeout(SPEED);
-	print_points();
 }
 
 void new_random_coordinates(SnakeCell *test_cell, int *x, int *y) {
@@ -64,8 +65,8 @@ int main(void) {
 
 	initscr();
 	getmaxyx(stdscr, MAX_Y, MAX_X);
-	GAME_WIN = subwin(stdscr, MAX_Y - 3, MAX_X, 0, 0);
-	STATUS_WIN = subwin(stdscr, 3, MAX_X, MAX_Y - 3, 0);
+	GAME_WIN = subwin(stdscr, MAX_Y - 4, MAX_X, 0, 0);
+	STATUS_WIN = subwin(stdscr, 4, MAX_X, MAX_Y - 4, 0);
 	box(STATUS_WIN, 0, 0);
 	getmaxyx(GAME_WIN, MAX_Y, MAX_X);
 	print_points(0);
@@ -122,7 +123,7 @@ int main(void) {
 			if(direction != UP)
 				direction = DOWN;
 		}else if(key == '\n') {
-			pause();
+			pause("--- PAUSE ---");
 		}else if(key == 'Q') {
 			return endwin();
 		}
@@ -190,6 +191,7 @@ int main(void) {
 		// of the snake the game is over.
 		if(is_moving(direction)) {
 			if(is_on_snake(cell->last, x, y)) {
+				pause("--- YOU LOST ---");
 				return endwin();
 			}
 		}
