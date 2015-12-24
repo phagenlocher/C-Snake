@@ -19,12 +19,28 @@ struct SnakeCell {
 
 static int MAX_X;
 static int MAX_Y;
+static int SPEED;
+static int POINTS;
 static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
 
-void print_points(int const points) {
-	mvwprintw(STATUS_WIN, 1, MAX_X / 2 - 10, "Points: \t%d", points);
+void print_points() {
+	wclear(STATUS_WIN);
+	box(STATUS_WIN, 0, 0);
+	mvwprintw(STATUS_WIN, 1, MAX_X / 2 - 10, "Points: \t%d", POINTS);
 	wrefresh(STATUS_WIN);
+}
+
+void pause() {
+	wclear(STATUS_WIN);
+	box(STATUS_WIN, 0, 0);
+	mvwaddstr(STATUS_WIN, 1, MAX_X / 2 - 7, "--- PAUSED ---");
+	wrefresh(STATUS_WIN);
+	// Set getch to 'blocking'-mode
+	timeout(-1);
+	getch();
+	timeout(SPEED);
+	print_points();
 }
 
 void new_random_coordinates(SnakeCell *test_cell, int *x, int *y) {
@@ -44,12 +60,9 @@ int is_on_snake(SnakeCell *test_cell, int x, int y){
 	return FALSE;
 }
 
-
-
 int main(void) {
 
 	initscr();
-	int SPEED = 150;
 	getmaxyx(stdscr, MAX_Y, MAX_X);
 	GAME_WIN = subwin(stdscr, MAX_Y - 3, MAX_X, 0, 0);
 	STATUS_WIN = subwin(stdscr, 3, MAX_X, MAX_Y - 3, 0);
@@ -58,6 +71,7 @@ int main(void) {
 	print_points(0);
 
 	// Init ncurses
+	SPEED = 150;
 	timeout(SPEED); // The timeout for getch() makes up the game speed
 	curs_set(FALSE);
 	noecho();
@@ -68,10 +82,10 @@ int main(void) {
 	srand(time(NULL));
 
 	// Init variables
-	int direction, old_direction, key, x, y, growing, food_x, food_y, points, point_timer;
+	int direction, old_direction, key, x, y, growing, food_x, food_y, point_timer;
 	x = MAX_X / 2;
 	y = MAX_Y / 2;
-	key = direction = old_direction = points = 0;
+	POINTS = key = direction = old_direction = 0;
 	point_timer = 200;
 	growing = 4;
 
@@ -107,6 +121,10 @@ int main(void) {
 		}else if(key == KEY_DOWN) {
 			if(direction != UP)
 				direction = DOWN;
+		}else if(key == '\n') {
+			pause();
+		}else if(key == 'Q') {
+			return endwin();
 		}
 
 		// Change x and y according to the direction and paint the fitting
@@ -179,15 +197,15 @@ int main(void) {
 		// Head hits the food
 		if((x == food_x) & (y == food_y)) {
 			// Let the snake grow and change the speed
-			growing = 20;
+			growing = 10;
 			SPEED -= 5;
-			points += point_timer;
+			POINTS += point_timer;
 			point_timer = 200;
 			if (SPEED < 50) {
 				SPEED = 50;
 			}
 			timeout(SPEED);
-			print_points(points);
+			print_points();
 			new_random_coordinates(cell, &food_x, &food_y);
 		}
 
