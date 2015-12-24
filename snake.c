@@ -19,6 +19,13 @@ struct SnakeCell {
 
 static int MAX_X;
 static int MAX_Y;
+static WINDOW *game_win;
+static WINDOW *status_win;
+
+void print_points(int const points) {
+	mvwprintw(status_win, 1, MAX_X / 2 - 10, "Points: \t%d", points);
+	wrefresh(status_win);
+}
 
 void new_random_coordinates(SnakeCell *test_cell, int *x, int *y) {
 	do {
@@ -37,11 +44,18 @@ int is_on_snake(SnakeCell *test_cell, int x, int y){
 	return FALSE;
 }
 
+
+
 int main(void) {
 
 	initscr();
 	int SPEED = 150;
 	getmaxyx(stdscr, MAX_Y, MAX_X);
+	game_win = subwin(stdscr, MAX_Y - 3, MAX_X, 0, 0);
+	status_win = subwin(stdscr, 3, MAX_X, MAX_Y - 3, 0);
+	box(status_win, 0, 0);
+	getmaxyx(game_win, MAX_Y, MAX_X);
+	print_points(0);
 
 	// Init ncurses
 	timeout(SPEED); // The timeout for getch() makes up the game speed
@@ -54,10 +68,11 @@ int main(void) {
 	srand(time(NULL));
 
 	// Init variables
-	int direction, old_direction, key, x, y, growing, food_x, food_y;
+	int direction, old_direction, key, x, y, growing, food_x, food_y, points, point_timer;
 	x = MAX_X / 2;
 	y = MAX_Y / 2;
-	key = direction = old_direction = 0;
+	key = direction = old_direction = points = 0;
+	point_timer = 200;
 	growing = 4;
 
 	// Create first cell for the snake
@@ -166,10 +181,13 @@ int main(void) {
 			// Let the snake grow and change the speed
 			growing = 20;
 			SPEED -= 5;
+			points += point_timer;
+			point_timer = 200;
 			if (SPEED < 50) {
 				SPEED = 50;
 			}
 			timeout(SPEED);
+			print_points(points);
 			new_random_coordinates(cell, &food_x, &food_y);
 		}
 
@@ -194,6 +212,11 @@ int main(void) {
 
 		// The old direction is the direction we had this round.
 		old_direction = direction;
+
+		// Decrement the points that will be added
+		if(point_timer > 10) {
+			point_timer--;
+		}
 		refresh();
 	}
 
