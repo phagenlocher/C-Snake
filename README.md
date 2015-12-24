@@ -1,6 +1,8 @@
 # C-Snake
 
-The classic game snake.
+The classic game: **Snake**
+
+Written with ncurses, it uses the terminal to display its gameplay.
 
 ## How to play
 
