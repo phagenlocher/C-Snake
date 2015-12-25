@@ -46,13 +46,6 @@ void pause(const char string[], const int seconds) {
 	timeout(SPEED);
 }
 
-void new_random_coordinates(SnakeCell *test_cell, int *x, int *y) {
-	do {
-		*x = rand() % MAX_X;
-		*y = rand() % MAX_Y;
-	} while(is_on_snake(test_cell, *x, *y));
-}
-
 int is_on_snake(SnakeCell *test_cell, const int x, const int y){
 	do{
 		if((test_cell->x == x) && (test_cell->y == y)) {
@@ -63,8 +56,23 @@ int is_on_snake(SnakeCell *test_cell, const int x, const int y){
 	return FALSE;
 }
 
+void new_random_coordinates(SnakeCell *test_cell, int *x, int *y) {
+	do {
+		*x = rand() % MAX_X;
+		*y = rand() % MAX_Y;
+	} while(is_on_snake(test_cell, *x, *y));
+}
+
+int snake_exit() {
+	delwin(GAME_WIN);
+	delwin(STATUS_WIN);
+	endwin();
+	return 0;
+}
+
 int main(void) {
 
+	// Init colors
 	initscr();
 	start_color();
 	init_pair(1, COLOR_WHITE, COLOR_BLACK); 
@@ -73,6 +81,7 @@ int main(void) {
 	init_pair(4, COLOR_YELLOW, COLOR_BLACK); 
   	bkgd(COLOR_PAIR(1));
 
+  	// Init windows and max coordinates
 	getmaxyx(stdscr, MAX_Y, MAX_X);
 	GAME_WIN = subwin(stdscr, MAX_Y - 4, MAX_X, 0, 0);
 	STATUS_WIN = subwin(stdscr, 4, MAX_X, MAX_Y - 4, 0);
@@ -80,7 +89,7 @@ int main(void) {
 	getmaxyx(GAME_WIN, MAX_Y, MAX_X);
 	print_points(0);
 
-	// Init ncurses
+	// Init ncurses-specific attributes
 	SPEED = 150;
 	timeout(SPEED); // The timeout for getch() makes up the game speed
 	curs_set(FALSE);
@@ -132,16 +141,16 @@ int main(void) {
 		}else if(key == KEY_DOWN) {
 			if(direction != UP)
 				direction = DOWN;
-		}else if(key == '\n') {
+		}else if(key == '\n') { // Enter-key
 			wattrset(STATUS_WIN, COLOR_PAIR(4) | A_BOLD);
 			pause("--- PAUSE ---", 0);
 		}else if(key == 'Q') {
-			return endwin();
+			return snake_exit();
 		}
 
 		// Change x and y according to the direction and paint the fitting
 		// character on the coordinate BEFORE changing the coordinate
-		wattrset(GAME_WIN, COLOR_PAIR(2) | A_BOLD);
+		wattrset(GAME_WIN, COLOR_PAIR(2) | A_BOLD); // Paints the snake green
 		if(direction == UP) {
 			if(old_direction == LEFT) {
 				mvwaddch(GAME_WIN, y,x,ACS_LLCORNER);
@@ -205,14 +214,14 @@ int main(void) {
 			if(is_on_snake(cell->last, x, y)) {
 				wattrset(STATUS_WIN, COLOR_PAIR(3) | A_BOLD);
 				pause("--- YOU LOST ---", 1);
-				return endwin();
+				return snake_exit();
 			}
 		}
 
 		// Head hits the food
-		if((x == food_x) & (y == food_y)) {
+		if((x == food_x) && (y == food_y)) {
 			// Let the snake grow and change the speed
-			growing = 10;
+			growing += 10;
 			SPEED -= 5;
 			POINTS += point_timer;
 			point_timer = 200;
@@ -255,6 +264,6 @@ int main(void) {
 		wrefresh(GAME_WIN);
 	}
 
-	return endwin();
+	return snake_exit();
 
 }
