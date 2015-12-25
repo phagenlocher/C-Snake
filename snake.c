@@ -26,18 +26,20 @@ static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
 
 void print_points() {
+	wattrset(STATUS_WIN, A_UNDERLINE  | A_BOLD);
 	mvwprintw(STATUS_WIN, 1, MAX_X / 2 - 4, "Points: %d", POINTS);
 	wrefresh(STATUS_WIN);
 }
 
-void pause(const char string[]) {
+void pause(const char string[], const int seconds) {
 	int i, length = strlen(string);
 	mvwaddstr(STATUS_WIN, 2, MAX_X / 2 - (length / 2), string);
 	wrefresh(STATUS_WIN);
 	// Set getch to 'blocking'-mode
 	timeout(-1);
+	sleep(seconds);
 	getch();
-	for(i = 1; i<MAX_X; i++) {
+	for(i = 1; i<MAX_X-1; i++) {
 		mvwaddch(STATUS_WIN, 2, i, ' ');
 	}
 	wrefresh(STATUS_WIN);
@@ -51,7 +53,7 @@ void new_random_coordinates(SnakeCell *test_cell, int *x, int *y) {
 	} while(is_on_snake(test_cell, *x, *y));
 }
 
-int is_on_snake(SnakeCell *test_cell, int x, int y){
+int is_on_snake(SnakeCell *test_cell, const int x, const int y){
 	do{
 		if((test_cell->x == x) && (test_cell->y == y)) {
 			return TRUE;
@@ -64,6 +66,13 @@ int is_on_snake(SnakeCell *test_cell, int x, int y){
 int main(void) {
 
 	initscr();
+	start_color();
+	init_pair(1, COLOR_WHITE, COLOR_BLACK); 
+	init_pair(2, COLOR_GREEN, COLOR_BLACK); 
+	init_pair(3, COLOR_RED, COLOR_BLACK); 
+	init_pair(4, COLOR_YELLOW, COLOR_BLACK); 
+  	bkgd(COLOR_PAIR(1));
+
 	getmaxyx(stdscr, MAX_Y, MAX_X);
 	GAME_WIN = subwin(stdscr, MAX_Y - 4, MAX_X, 0, 0);
 	STATUS_WIN = subwin(stdscr, 4, MAX_X, MAX_Y - 4, 0);
@@ -104,6 +113,7 @@ int main(void) {
 	while(TRUE) {
 
 		// Painting the food
+		wattrset(GAME_WIN, COLOR_PAIR(3) | A_BOLD);
 		mvwaddch(GAME_WIN, food_y, food_x, '0');
 
 		// Getting input
@@ -123,13 +133,15 @@ int main(void) {
 			if(direction != UP)
 				direction = DOWN;
 		}else if(key == '\n') {
-			pause("--- PAUSE ---");
+			wattrset(STATUS_WIN, COLOR_PAIR(4) | A_BOLD);
+			pause("--- PAUSE ---", 0);
 		}else if(key == 'Q') {
 			return endwin();
 		}
 
 		// Change x and y according to the direction and paint the fitting
 		// character on the coordinate BEFORE changing the coordinate
+		wattrset(GAME_WIN, COLOR_PAIR(2) | A_BOLD);
 		if(direction == UP) {
 			if(old_direction == LEFT) {
 				mvwaddch(GAME_WIN, y,x,ACS_LLCORNER);
@@ -191,7 +203,8 @@ int main(void) {
 		// of the snake the game is over.
 		if(is_moving(direction)) {
 			if(is_on_snake(cell->last, x, y)) {
-				pause("--- YOU LOST ---");
+				wattrset(STATUS_WIN, COLOR_PAIR(3) | A_BOLD);
+				pause("--- YOU LOST ---", 1);
 				return endwin();
 			}
 		}
@@ -219,6 +232,7 @@ int main(void) {
 				last_cell = last_cell->last;
 			}
 			// ...delete the character from the terminal...
+			wattrset(GAME_WIN, A_NORMAL);
 			mvwaddch(GAME_WIN, last_cell->y,last_cell->x,' ');
 			// ...and free the memory for this cell.
 			last_cell->next->last = NULL;
