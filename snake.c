@@ -29,6 +29,7 @@ static WINDOW *STATUS_WIN;
 void clean_exit() {
 	delwin(GAME_WIN);
 	delwin(STATUS_WIN);
+	delwin(stdscr);
 	endwin();
 	exit(0);
 }
@@ -57,11 +58,11 @@ void start_screen() {
 	attrset(A_NORMAL);
 	while(TRUE) {
 		key = getch();
-		if(key == 'P') {
+		if((key == 'P') || (key == 'p')) {
 			clear();
 			play_round();
 			break;
-		}else if(key == 'Q') {
+		}else if((key == 'Q') || (key == 'q')) {
 			clean_exit();
 		}
 	}
@@ -166,7 +167,7 @@ void play_round() {
 			wattrset(STATUS_WIN, COLOR_PAIR(4) | A_BOLD);
 			pause("--- PAUSED ---", 0);
 		}else if(key == 'Q') {
-			clean_exit();
+			break;
 		}
 
 		// Change x and y according to the direction and paint the fitting
@@ -235,7 +236,7 @@ void play_round() {
 			if(is_on_snake(cell->last, x, y)) {
 				wattrset(STATUS_WIN, COLOR_PAIR(3) | A_BOLD);
 				pause("--- YOU LOST ---", 1);
-				return;
+				break;
 			}
 		}
 
@@ -283,6 +284,16 @@ void play_round() {
 
 		wrefresh(GAME_WIN);
 	}
+
+	// Freeing memory used for the snake
+	SnakeCell *tmp_cell;
+	while(cell->last != NULL) {
+		tmp_cell = cell->last;
+		free(cell);
+		cell = tmp_cell;
+	}
+	free(cell);
+
 }
 
 int main(void) {
