@@ -8,6 +8,7 @@
 #define RIGHT 3
 #define LEFT 4
 #define is_moving(direction) ((direction >= UP) && (direction <= LEFT))
+#define centered(string) ((MAX_X / 2) - (strlen(string) / 2))
 
 typedef struct SnakeCell SnakeCell;
 
@@ -25,6 +26,47 @@ static int POINTS;
 static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
 
+void clean_exit() {
+	delwin(GAME_WIN);
+	delwin(STATUS_WIN);
+	endwin();
+	exit(0);
+}
+
+void start_screen() {
+	int i, key;
+	getmaxyx(stdscr, MAX_Y, MAX_X);
+	char *logo[] = {
+	" a88888b.          .d88888b                    dP               ",
+	"d8'   `88          88.    ''                   88               ", 
+	"88                 `Y88888b. 88d888b. .d8888b. 88  .dP  .d8888b.",
+	"88        88888888       `8b 88'  `88 88'  `88 88888'   88ooood8",
+	"Y8.   .88          d8'   .8P 88    88 88.  .88 88  `8b. 88.  ...",
+	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"};
+	clear();
+	attrset(COLOR_PAIR(2) | A_BOLD);
+	for(i = 0; i<6; i++) {
+		mvaddstr(MAX_Y / 2 - 20 + i, centered(logo[i]), logo[i]);
+	}
+	attrset(COLOR_PAIR(1) | A_BOLD);
+	char instruction[] = "--- (P)lay Game --- (Q)uit ---";
+	char text[] = "--- Last Points: TODO ---";
+	mvaddstr(MAX_Y / 2 - 20 + 7, centered(instruction), instruction);
+	mvaddstr(MAX_Y / 2 - 20 + 8, centered(text), text);
+	timeout(-1);
+	attrset(A_NORMAL);
+	while(TRUE) {
+		key = getch();
+		if(key == 'P') {
+			clear();
+			play_round();
+			break;
+		}else if(key == 'Q') {
+			clean_exit();
+		}
+	}
+}
+
 void print_points() {
 	wattrset(STATUS_WIN, A_UNDERLINE  | A_BOLD);
 	mvwprintw(STATUS_WIN, 1, MAX_X / 2 - 4, "Points: %d", POINTS);
@@ -32,8 +74,8 @@ void print_points() {
 }
 
 void pause(const char string[], const int seconds) {
-	int i, length = strlen(string);
-	mvwaddstr(STATUS_WIN, 2, MAX_X / 2 - (length / 2), string);
+	int i;
+	mvwaddstr(STATUS_WIN, 2, centered(string), string);
 	wrefresh(STATUS_WIN);
 	// Set getch to 'blocking'-mode
 	timeout(-1);
@@ -63,24 +105,7 @@ void new_random_coordinates(SnakeCell *test_cell, int *x, int *y) {
 	} while(is_on_snake(test_cell, *x, *y));
 }
 
-int snake_exit() {
-	delwin(GAME_WIN);
-	delwin(STATUS_WIN);
-	endwin();
-	return 0;
-}
-
-int main(void) {
-
-	// Init colors
-	initscr();
-	start_color();
-	init_pair(1, COLOR_WHITE, COLOR_BLACK); 
-	init_pair(2, COLOR_GREEN, COLOR_BLACK); 
-	init_pair(3, COLOR_RED, COLOR_BLACK); 
-	init_pair(4, COLOR_YELLOW, COLOR_BLACK); 
-  	bkgd(COLOR_PAIR(1));
-
+void play_round() {
   	// Init windows and max coordinates
 	getmaxyx(stdscr, MAX_Y, MAX_X);
 	GAME_WIN = subwin(stdscr, MAX_Y - 4, MAX_X, 0, 0);
@@ -89,13 +114,9 @@ int main(void) {
 	getmaxyx(GAME_WIN, MAX_Y, MAX_X);
 	print_points(0);
 
-	// Init ncurses-specific attributes
+	// Set game specific timeout
 	SPEED = 150;
 	timeout(SPEED); // The timeout for getch() makes up the game speed
-	curs_set(FALSE);
-	noecho();
-	cbreak();
-	keypad(stdscr, TRUE);
 
 	// Init RNG with current time
 	srand(time(NULL));
@@ -143,9 +164,9 @@ int main(void) {
 				direction = DOWN;
 		}else if(key == '\n') { // Enter-key
 			wattrset(STATUS_WIN, COLOR_PAIR(4) | A_BOLD);
-			pause("--- PAUSE ---", 0);
+			pause("--- PAUSED ---", 0);
 		}else if(key == 'Q') {
-			return snake_exit();
+			clean_exit();
 		}
 
 		// Change x and y according to the direction and paint the fitting
@@ -214,7 +235,7 @@ int main(void) {
 			if(is_on_snake(cell->last, x, y)) {
 				wattrset(STATUS_WIN, COLOR_PAIR(3) | A_BOLD);
 				pause("--- YOU LOST ---", 1);
-				return snake_exit();
+				return;
 			}
 		}
 
@@ -222,12 +243,11 @@ int main(void) {
 		if((x == food_x) && (y == food_y)) {
 			// Let the snake grow and change the speed
 			growing += 10;
-			SPEED -= 5;
+			if(SPEED > 50) {
+				SPEED -= 5;
+			}
 			POINTS += point_timer;
 			point_timer = 200;
-			if (SPEED < 50) {
-				SPEED = 50;
-			}
 			timeout(SPEED);
 			print_points();
 			new_random_coordinates(cell, &food_x, &food_y);
@@ -263,7 +283,26 @@ int main(void) {
 
 		wrefresh(GAME_WIN);
 	}
+}
 
-	return snake_exit();
+int main(void) {
+
+	// Init colors and ncurses specific functions
+	initscr();
+	start_color();
+	init_pair(1, COLOR_WHITE, COLOR_BLACK); 
+	init_pair(2, COLOR_GREEN, COLOR_BLACK); 
+	init_pair(3, COLOR_RED, COLOR_BLACK); 
+	init_pair(4, COLOR_YELLOW, COLOR_BLACK); 
+  	bkgd(COLOR_PAIR(1));
+  	curs_set(FALSE);
+	noecho();
+	cbreak();
+	keypad(stdscr, TRUE);
+
+	// Endless loop until the user quits the game
+	while(TRUE) {
+  		start_screen();
+  	}
 
 }
