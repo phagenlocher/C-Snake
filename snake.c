@@ -3,14 +3,13 @@
 #include <string.h>
 #include <time.h>
 
-#define UP 1
-#define DOWN 2
-#define RIGHT 3
-#define LEFT 4
-#define is_moving(direction) ((direction >= UP) && (direction <= LEFT))
+#define is_moving(direction) (direction != HOLD)
 #define centered(string) ((MAX_X / 2) - (strlen(string) / 2))
 
+typedef enum Direction Direction;
 typedef struct SnakeCell SnakeCell;
+
+enum Direction {HOLD, UP, DOWN, RIGHT, LEFT};
 
 struct SnakeCell {
 	int x;
@@ -123,12 +122,14 @@ void play_round() {
 	srand(time(NULL));
 
 	// Init variables
-	int direction, old_direction, key, x, y, growing, food_x, food_y, point_timer;
+	int key, x, y, growing, food_x, food_y, points_counter;
+	Direction direction, old_direction;
 	x = MAX_X / 2;
 	y = MAX_Y / 2;
-	POINTS = key = direction = old_direction = 0;
-	point_timer = 200;
+	POINTS = key = 0;
+	points_counter = 200;
 	growing = 4;
+	direction = old_direction = HOLD;
 
 	// Create first cell for the snake
 	SnakeCell *cell = malloc(sizeof(SnakeCell));
@@ -247,8 +248,8 @@ void play_round() {
 			if(SPEED > 50) {
 				SPEED -= 5;
 			}
-			POINTS += point_timer;
-			point_timer = 200;
+			POINTS += points_counter;
+			points_counter = 200;
 			timeout(SPEED);
 			print_points();
 			new_random_coordinates(cell, &food_x, &food_y);
@@ -278,8 +279,8 @@ void play_round() {
 		old_direction = direction;
 
 		// Decrement the points that will be added
-		if(point_timer > 10) {
-			point_timer--;
+		if(points_counter > 10) {
+			points_counter--;
 		}
 
 		wrefresh(GAME_WIN);
