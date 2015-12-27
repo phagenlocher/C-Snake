@@ -19,5 +19,15 @@ Arguments:
 ## How to compile
 
 ```
-gcc snake.c -lncurses -o snake
+make
+```
+
+If you want to install C-Snake to your local binary directory you can use:
+```
+make install
+```
+
+To uninstall it again:
+```
+make uninstall
 ```

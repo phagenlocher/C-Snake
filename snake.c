@@ -20,6 +20,7 @@ struct SnakeCell {
 };
 
 // Globals
+static char VERSION[] = "a0.1";
 static unsigned int MAX_X;
 static unsigned int MAX_Y;
 static unsigned int SPEED;
@@ -37,53 +38,10 @@ void clean_exit() {
 	exit(0);
 }
 
-void show_startscreen() {
-	int i, key;
-	getmaxyx(stdscr, MAX_Y, MAX_X);
-	const char *logo[] = {
-	" a88888b.          .d88888b                    dP               ",
-	"d8'   `88          88.    ''                   88               ", 
-	"88                 `Y88888b. 88d888b. .d8888b. 88  .dP  .d8888b.",
-	"88        88888888       `8b 88'  `88 88'  `88 88888'   88ooood8",
-	"Y8.   .88          d8'   .8P 88    88 88.  .88 88  `8b. 88.  ...",
-	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"};
-	const char instruction[] = "--- (P)lay Game --- (Q)uit ---";
-	clear();
-	// Printing logo and instructions
-	attrset(COLOR_PAIR(SNAKE_COLOR) | A_BOLD);
-	for(i = 0; i<6; i++) {
-		mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + i, centered(logo[i]), logo[i]);
-	}
-	attrset(COLOR_PAIR(1) | A_BOLD);
-	mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + 7, centered(instruction), instruction);
-
-	// If points != 0 print them to the screen
-	if(POINTS != 0) {
-		char *points_text = malloc(sizeof(char) * MAX_X);
-		sprintf(points_text, "--- Last Score: %u ---", POINTS);
-		mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + 8, centered(points_text), points_text);
-		free(points_text);
-	}
-
-	// Wait for input
-	timeout(-1);
-	attrset(A_NORMAL);
-	while(TRUE) {
-		key = getch();
-		if((key == 'P') || (key == 'p')) {
-			clear();
-			play_round();
-			break;
-		}else if((key == 'Q') || (key == 'q')) {
-			clean_exit();
-		}
-	}
-}
-
 void print_points() {
 	wattrset(STATUS_WIN, A_UNDERLINE  | A_BOLD);
 	char *points_text = malloc(sizeof(char) * MAX_X);
-	sprintf(points_text, "Score: %u", POINTS);
+	sprintf(points_text, "Score: %lu", POINTS);
 	mvwaddstr(STATUS_WIN, 1, centered(points_text), points_text);
 	free(points_text);
 	wrefresh(STATUS_WIN);
@@ -93,15 +51,18 @@ void pause_game(const char string[], const int seconds) {
 	int i;
 	mvwaddstr(STATUS_WIN, 2, centered(string), string);
 	wrefresh(STATUS_WIN);
-	// Set getch to 'blocking'-mode
-	timeout(-1);
-	sleep(seconds);
-	getch();
+	
+	if(seconds == 0) {
+		timeout(-1);
+		getch();
+		timeout(SPEED);
+	} else {
+		sleep(seconds);
+	}
 	for(i = 1; i<MAX_X-1; i++) {
 		mvwaddch(STATUS_WIN, 2, i, ' ');
 	}
 	wrefresh(STATUS_WIN);
-	timeout(SPEED);
 }
 
 int is_on_snake(SnakeCell *test_cell, const int x, const int y){
@@ -142,7 +103,7 @@ void play_round() {
 	x = MAX_X / 2;
 	y = MAX_Y / 2;
 	POINTS = key = 0;
-	points_counter = 200;
+	points_counter = 1000;
 	growing = 4;
 	lost = TRUE;
 	direction = old_direction = HOLD;
@@ -281,7 +242,7 @@ void play_round() {
 				SPEED -= 5;
 			}
 			POINTS += points_counter;
-			points_counter = 200;
+			points_counter = 1000;
 			timeout(SPEED);
 			print_points();
 			new_random_coordinates(cell, &food_x, &food_y);
@@ -309,7 +270,7 @@ void play_round() {
 		old_direction = direction;
 
 		// Decrement the points that will be added
-		if(points_counter > 10) {
+		if(points_counter > 100) {
 			points_counter--;
 		}
 
@@ -318,7 +279,7 @@ void play_round() {
 
 	if(lost) {
 		wattrset(STATUS_WIN, COLOR_PAIR(3) | A_BOLD);
-		pause_game("--- YOU LOST ---", 1);
+		pause_game("--- YOU LOST ---", 2);
 	}
 
 	// Freeing memory used for the snake
@@ -332,9 +293,52 @@ void play_round() {
 
 }
 
+void show_startscreen() {
+	int i, key;
+	getmaxyx(stdscr, MAX_Y, MAX_X);
+	const char *logo[] = {
+	" a88888b.          .d88888b                    dP               ",
+	"d8'   `88          88.    ''                   88               ", 
+	"88                 `Y88888b. 88d888b. .d8888b. 88  .dP  .d8888b.",
+	"88        88888888       `8b 88'  `88 88'  `88 88888'   88ooood8",
+	"Y8.   .88          d8'   .8P 88    88 88.  .88 88  `8b. 88.  ...",
+	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"};
+	const char instruction[] = "--- (P)lay Game --- (Q)uit ---";
+	clear();
+	// Printing logo and instructions
+	attrset(COLOR_PAIR(SNAKE_COLOR) | A_BOLD);
+	for(i = 0; i<6; i++) {
+		mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + i, centered(logo[i]), logo[i]);
+	}
+	attrset(COLOR_PAIR(1) | A_BOLD);
+	mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + 7, centered(instruction), instruction);
+
+	// If points != 0 print them to the screen
+	if(POINTS != 0) {
+		char *points_text = malloc(sizeof(char) * MAX_X);
+		sprintf(points_text, "--- Last Score: %lu ---", POINTS);
+		mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + 8, centered(points_text), points_text);
+		free(points_text);
+	}
+
+	// Wait for input
+	timeout(-1);
+	attrset(A_NORMAL);
+	while(TRUE) {
+		key = getch();
+		if((key == 'P') || (key == 'p')) {
+			clear();
+			play_round();
+			break;
+		}else if((key == 'Q') || (key == 'q')) {
+			clean_exit();
+		}
+	}
+}
+
 void parse_arguments(int argc, char **argv) {
 	int arg, color;
-	while((arg = getopt(argc, argv, "ohc:")) != -1) {
+	while((arg = getopt(argc, argv, "ohvc:")) != -1) {
 		switch (arg) {
 			case 'o':
 				OPEN_BOUNDS = TRUE;
@@ -345,7 +349,7 @@ void parse_arguments(int argc, char **argv) {
 					SNAKE_COLOR = color;
 					break;
 				}
-			case '?':
+			case '?': // Invalid parameter
 				// pass to help information
 			case 'h':
 				printf("Usage: %s [options]\n", argv[0]);
@@ -353,6 +357,10 @@ void parse_arguments(int argc, char **argv) {
 				printf(" -o\tOuter bounds will let the snake pass through\n");
 				printf(" -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
 				printf(" -h\tDisplay this information\n");
+				printf(" -v\tDisplay version and license information\n");
+				exit(0);
+			case 'v':
+				printf("C-Snake %s\nCopyright (c) 2015 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text or visit https://opensource.org/licenses/MIT\nThere is no warranty.\n", VERSION);
 				exit(0);
 		}
 	}

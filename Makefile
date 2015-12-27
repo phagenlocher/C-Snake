@@ -2,7 +2,7 @@ snake: snake.c
 	gcc snake.c -lncurses -Ofast -funroll-loops -o snake
 
 install: snake
-	mv snake /usr/bin/snake
+	mv snake /usr/local/bin/snake
 
 uninstall:
-	rm /usr/bin/snake
+	rm /usr/local/bin/snake
