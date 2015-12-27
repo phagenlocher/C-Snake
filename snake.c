@@ -18,10 +18,10 @@ struct SnakeCell {
 	SnakeCell *next;
 };
 
-static int MAX_X;
-static int MAX_Y;
-static int SPEED;
-static int POINTS;
+static unsigned int MAX_X;
+static unsigned int MAX_Y;
+static unsigned char SPEED;
+static unsigned long POINTS;
 static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
 
@@ -36,23 +36,32 @@ void clean_exit() {
 void start_screen() {
 	int i, key;
 	getmaxyx(stdscr, MAX_Y, MAX_X);
-	char *logo[] = {
+	const char *logo[] = {
 	" a88888b.          .d88888b                    dP               ",
 	"d8'   `88          88.    ''                   88               ", 
 	"88                 `Y88888b. 88d888b. .d8888b. 88  .dP  .d8888b.",
 	"88        88888888       `8b 88'  `88 88'  `88 88888'   88ooood8",
 	"Y8.   .88          d8'   .8P 88    88 88.  .88 88  `8b. 88.  ...",
 	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"};
+	const char instruction[] = "--- (P)lay Game --- (Q)uit ---";
 	clear();
+	// Printing logo and instructions
 	attrset(COLOR_PAIR(2) | A_BOLD);
 	for(i = 0; i<6; i++) {
 		mvaddstr(MAX_Y / 2 - 20 + i, centered(logo[i]), logo[i]);
 	}
 	attrset(COLOR_PAIR(1) | A_BOLD);
-	char instruction[] = "--- (P)lay Game --- (Q)uit ---";
-	char text[] = "--- Last Points: TODO ---";
 	mvaddstr(MAX_Y / 2 - 20 + 7, centered(instruction), instruction);
-	mvaddstr(MAX_Y / 2 - 20 + 8, centered(text), text);
+
+	// If points != 0 print them to the screen
+	if(POINTS != 0) {
+		char *points_text = malloc(sizeof(char) * MAX_X);
+		sprintf(points_text, "--- Last Points: %u ---", POINTS);
+		mvaddstr(MAX_Y / 2 - 20 + 8, centered(points_text), points_text);
+		free(points_text);
+	}
+
+	// Wait for input
 	timeout(-1);
 	attrset(A_NORMAL);
 	while(TRUE) {
@@ -69,7 +78,10 @@ void start_screen() {
 
 void print_points() {
 	wattrset(STATUS_WIN, A_UNDERLINE  | A_BOLD);
-	mvwprintw(STATUS_WIN, 1, MAX_X / 2 - 4, "Points: %d", POINTS);
+	char *points_text = malloc(sizeof(char) * MAX_X);
+	sprintf(points_text, "Points: %u", POINTS);
+	mvwaddstr(STATUS_WIN, 1, centered(points_text), points_text);
+	free(points_text);
 	wrefresh(STATUS_WIN);
 }
 
@@ -112,7 +124,6 @@ void play_round() {
 	STATUS_WIN = subwin(stdscr, 4, MAX_X, MAX_Y - 4, 0);
 	box(STATUS_WIN, 0, 0);
 	getmaxyx(GAME_WIN, MAX_Y, MAX_X);
-	print_points(0);
 
 	// Set game specific timeout
 	SPEED = 150;
@@ -130,6 +141,9 @@ void play_round() {
 	points_counter = 200;
 	growing = 4;
 	direction = old_direction = HOLD;
+
+	// Print points after they have been set to 0
+	print_points();
 
 	// Create first cell for the snake
 	SnakeCell *cell = malloc(sizeof(SnakeCell));
