@@ -6,6 +6,8 @@
 
 // Macro to get the x-coordinate for a string to be centered on screen
 #define centered(string) ((MAX_X / 2) - (strlen(string) / 2))
+// Macro to print a centered string on a window an a specific y-coordinate
+#define print_centered(window, y, string) ((mvwaddstr(window, y, centered(string), string)))
 
 typedef enum Direction Direction;
 typedef struct SnakeCell SnakeCell;
@@ -20,11 +22,12 @@ struct SnakeCell {
 };
 
 // Globals
-static char VERSION[] = "a0.1";
+static const char VERSION[] = "a0.1";
 static unsigned int MAX_X;
 static unsigned int MAX_Y;
 static unsigned int SPEED;
 static unsigned long POINTS;
+static unsigned long HIGHSCORE;
 static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
 static int OPEN_BOUNDS = FALSE;
@@ -42,20 +45,21 @@ void print_points() {
 	wattrset(STATUS_WIN, A_UNDERLINE  | A_BOLD);
 	char *points_text = malloc(sizeof(char) * MAX_X);
 	sprintf(points_text, "Score: %lu", POINTS);
-	mvwaddstr(STATUS_WIN, 1, centered(points_text), points_text);
+	print_centered(STATUS_WIN, 1, points_text);
 	free(points_text);
 	wrefresh(STATUS_WIN);
 }
 
 void pause_game(const char string[], const int seconds) {
 	int i;
-	mvwaddstr(STATUS_WIN, 2, centered(string), string);
+	print_centered(STATUS_WIN, 2, string);
 	wrefresh(STATUS_WIN);
 	
+	// Pausing for 0 seconds means waiting for input
 	if(seconds == 0) {
-		timeout(-1);
+		timeout(-1); // getch is in blocking mode
 		getch();
-		timeout(SPEED);
+		timeout(SPEED); // getch is in nonblocking mode
 	} else {
 		sleep(seconds);
 	}
@@ -282,6 +286,10 @@ void play_round() {
 		pause_game("--- YOU LOST ---", 2);
 	}
 
+	if(POINTS > HIGHSCORE) {
+		HIGHSCORE = POINTS;
+	}
+
 	// Freeing memory used for the snake
 	SnakeCell *tmp_cell;
 	while(cell->last != NULL) {
@@ -308,18 +316,27 @@ void show_startscreen() {
 	// Printing logo and instructions
 	attrset(COLOR_PAIR(SNAKE_COLOR) | A_BOLD);
 	for(i = 0; i<6; i++) {
-		mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + i, centered(logo[i]), logo[i]);
+		print_centered(stdscr, (MAX_Y / 4) + i, logo[i]);
 	}
 	attrset(COLOR_PAIR(1) | A_BOLD);
-	mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + 7, centered(instruction), instruction);
+	print_centered(stdscr, (MAX_Y / 4) + 7, instruction);
 
+	// The buffer is big enough to store a string that goes across the screen
+	char *text = malloc(sizeof(char) * MAX_X);
 	// If points != 0 print them to the screen
 	if(POINTS != 0) {
-		char *points_text = malloc(sizeof(char) * MAX_X);
-		sprintf(points_text, "--- Last Score: %lu ---", POINTS);
-		mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + 8, centered(points_text), points_text);
-		free(points_text);
+		sprintf(text, "--- Last Score: %lu ---", POINTS);
+		print_centered(stdscr, (MAX_Y / 4) + 8, text);
 	}
+	if(HIGHSCORE != 0) {
+		sprintf(text, "--- Highscore: %lu ---", HIGHSCORE);
+		print_centered(stdscr, (MAX_Y / 4) + 9, text);
+	}
+
+	// Printing verions
+	sprintf(text, "Version: %s", VERSION);
+	print_centered(stdscr, MAX_Y - 1, text);
+	free(text);
 
 	// Wait for input
 	timeout(-1);

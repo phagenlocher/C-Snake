@@ -15,6 +15,9 @@ Rules:
 
 Arguments:
 * **-o** will make the outer bounds open so you can exit the screen and come out on the other side!
+* **-c <1-5>** changes the color of the snake
+* **-h** displays help information
+* **-v** displays information about the version and license
 
 ## How to compile
 

@@ -1,5 +1,5 @@
 snake: snake.c
-	gcc snake.c -lncurses -Ofast -funroll-loops -o snake
+	gcc snake.c -lncurses -Ofast -funroll-loops -Wall -o snake
 
 install: snake
 	mv snake /usr/local/bin/snake
