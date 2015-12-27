@@ -1,6 +1,7 @@
 #include <ncurses.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <time.h>
 
 #define is_moving(direction) (direction != HOLD)
@@ -18,12 +19,14 @@ struct SnakeCell {
 	SnakeCell *next;
 };
 
+// Globals
 static unsigned int MAX_X;
 static unsigned int MAX_Y;
-static unsigned char SPEED;
+static unsigned int SPEED;
 static unsigned long POINTS;
 static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
+static int OPEN_BOUNDS = FALSE;
 
 void clean_exit() {
 	delwin(GAME_WIN);
@@ -85,7 +88,7 @@ void print_points() {
 	wrefresh(STATUS_WIN);
 }
 
-void pause(const char string[], const int seconds) {
+void pause_game(const char string[], const int seconds) {
 	int i;
 	mvwaddstr(STATUS_WIN, 2, centered(string), string);
 	wrefresh(STATUS_WIN);
@@ -180,7 +183,7 @@ void play_round() {
 				direction = DOWN;
 		}else if(key == '\n') { // Enter-key
 			wattrset(STATUS_WIN, COLOR_PAIR(4) | A_BOLD);
-			pause("--- PAUSED ---", 0);
+			pause_game("--- PAUSED ---", 0);
 		}else if(key == 'Q') {
 			break;
 		}
@@ -226,15 +229,25 @@ void play_round() {
 			x++;
 		}
 
-		// If you hit the outer bounds you'll end up on the other side
-		if(y < 0) {
-			y = MAX_Y;
-		}else if(y >= MAX_Y) {
-			y = 0;
-		}else if(x < 0) {
-			x = MAX_X;
-		}else if(x >= MAX_X){
-			x = 0;
+		if(OPEN_BOUNDS) {
+			// If you hit the outer bounds you'll end up on the other side
+			if(y < 0) {
+				y = MAX_Y;
+			}else if(y >= MAX_Y) {
+				y = 0;
+			}else if(x < 0) {
+				x = MAX_X;
+			}else if(x >= MAX_X){
+				x = 0;
+			}
+		} else {
+			// If the bounds aren't open you will loose
+			if((y < 0) || (x < 0)) {
+				break;
+			}
+			if((y >= MAX_Y) || (x >= MAX_X)) {
+				break;
+			}
 		}
 
 		// Draw head and create new cell for the head
@@ -250,7 +263,7 @@ void play_round() {
 		if(is_moving(direction)) {
 			if(is_on_snake(cell->last, x, y)) {
 				wattrset(STATUS_WIN, COLOR_PAIR(3) | A_BOLD);
-				pause("--- YOU LOST ---", 1);
+				pause_game("--- YOU LOST ---", 1);
 				break;
 			}
 		}
@@ -311,8 +324,27 @@ void play_round() {
 
 }
 
-int main(void) {
+void parse_arguments(int argc, char **argv) {
+	int arg;
+	while((arg = getopt(argc, argv, "oh")) != -1) {
+		switch (arg) {
+			case 'o':
+				OPEN_BOUNDS = TRUE;
+				break;
+			case 'h':
+				printf("Usage: %s [options]\n", argv[0]);
+				printf("Options:\n");
+				printf(" -o\tOuter bounds will let the snake pass through\n");
+				printf(" -h\tDisplay this information\n");
+				exit(0);
+		}
+	}
+}
 
+int main(int argc, char **argv) {
+
+	// Parse arguments
+	parse_arguments(argc, argv);
 	// Init colors and ncurses specific functions
 	initscr();
 	start_color();
