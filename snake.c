@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#define is_moving(direction) (direction != HOLD)
+// Macro to get the x-coordinate for a string to be centered on screen
 #define centered(string) ((MAX_X / 2) - (strlen(string) / 2))
 
 typedef enum Direction Direction;
@@ -27,6 +27,7 @@ static unsigned long POINTS;
 static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
 static int OPEN_BOUNDS = FALSE;
+static int SNAKE_COLOR = 2;
 
 void clean_exit() {
 	delwin(GAME_WIN);
@@ -36,7 +37,7 @@ void clean_exit() {
 	exit(0);
 }
 
-void start_screen() {
+void show_startscreen() {
 	int i, key;
 	getmaxyx(stdscr, MAX_Y, MAX_X);
 	const char *logo[] = {
@@ -49,18 +50,18 @@ void start_screen() {
 	const char instruction[] = "--- (P)lay Game --- (Q)uit ---";
 	clear();
 	// Printing logo and instructions
-	attrset(COLOR_PAIR(2) | A_BOLD);
+	attrset(COLOR_PAIR(SNAKE_COLOR) | A_BOLD);
 	for(i = 0; i<6; i++) {
-		mvaddstr(MAX_Y / 2 - 20 + i, centered(logo[i]), logo[i]);
+		mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + i, centered(logo[i]), logo[i]);
 	}
 	attrset(COLOR_PAIR(1) | A_BOLD);
-	mvaddstr(MAX_Y / 2 - 20 + 7, centered(instruction), instruction);
+	mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + 7, centered(instruction), instruction);
 
 	// If points != 0 print them to the screen
 	if(POINTS != 0) {
 		char *points_text = malloc(sizeof(char) * MAX_X);
-		sprintf(points_text, "--- Last Points: %u ---", POINTS);
-		mvaddstr(MAX_Y / 2 - 20 + 8, centered(points_text), points_text);
+		sprintf(points_text, "--- Last Score: %u ---", POINTS);
+		mvaddstr(MAX_Y / 2 - (MAX_Y / 4) + 8, centered(points_text), points_text);
 		free(points_text);
 	}
 
@@ -82,7 +83,7 @@ void start_screen() {
 void print_points() {
 	wattrset(STATUS_WIN, A_UNDERLINE  | A_BOLD);
 	char *points_text = malloc(sizeof(char) * MAX_X);
-	sprintf(points_text, "Points: %u", POINTS);
+	sprintf(points_text, "Score: %u", POINTS);
 	mvwaddstr(STATUS_WIN, 1, centered(points_text), points_text);
 	free(points_text);
 	wrefresh(STATUS_WIN);
@@ -136,13 +137,14 @@ void play_round() {
 	srand(time(NULL));
 
 	// Init variables
-	int key, x, y, growing, food_x, food_y, points_counter;
+	int key, x, y, growing, food_x, food_y, points_counter, lost;
 	Direction direction, old_direction;
 	x = MAX_X / 2;
 	y = MAX_Y / 2;
 	POINTS = key = 0;
 	points_counter = 200;
 	growing = 4;
+	lost = TRUE;
 	direction = old_direction = HOLD;
 
 	// Print points after they have been set to 0
@@ -161,12 +163,14 @@ void play_round() {
 	// Game-Loop
 	while(TRUE) {
 
-		// Painting the food
+		// Painting the food and the snakes head
 		wattrset(GAME_WIN, COLOR_PAIR(3) | A_BOLD);
 		mvwaddch(GAME_WIN, food_y, food_x, '0');
+		wattrset(GAME_WIN, COLOR_PAIR(SNAKE_COLOR) | A_BOLD);
+		mvwaddch(GAME_WIN,y,x,'X');
 
 		// Getting input
-		key = getch();
+		get_input: key = getch();
 
 		// Changing direction according to the input
 		if(key == KEY_LEFT) {
@@ -185,12 +189,17 @@ void play_round() {
 			wattrset(STATUS_WIN, COLOR_PAIR(4) | A_BOLD);
 			pause_game("--- PAUSED ---", 0);
 		}else if(key == 'Q') {
+			lost = FALSE;
 			break;
+		}else if(direction == HOLD) {
+			// If the snake is not moving, there is no update to be made
+			goto get_input;
 		}
 
 		// Change x and y according to the direction and paint the fitting
 		// character on the coordinate BEFORE changing the coordinate
-		wattrset(GAME_WIN, COLOR_PAIR(2) | A_BOLD); // Paints the snake green
+		// Paint the snake in the specified color
+		wattrset(GAME_WIN, COLOR_PAIR(SNAKE_COLOR) | A_BOLD);
 		if(direction == UP) {
 			if(old_direction == LEFT) {
 				mvwaddch(GAME_WIN, y,x,ACS_LLCORNER);
@@ -260,12 +269,8 @@ void play_round() {
 		cell = new_cell;
 		// If the snake is moving (game has started) and the head hit the body
 		// of the snake the game is over.
-		if(is_moving(direction)) {
-			if(is_on_snake(cell->last, x, y)) {
-				wattrset(STATUS_WIN, COLOR_PAIR(3) | A_BOLD);
-				pause_game("--- YOU LOST ---", 1);
-				break;
-			}
+		if(is_on_snake(cell->last, x, y)) {
+			break;
 		}
 
 		// Head hits the food
@@ -297,9 +302,7 @@ void play_round() {
 			free(last_cell);
 		} else {
 			// If the snake is growing and moving, just decrement 'growing'
-			if(is_moving(direction)) {
-				growing--;
-			}
+			growing--;
 		}
 
 		// The old direction is the direction we had this round.
@@ -311,6 +314,11 @@ void play_round() {
 		}
 
 		wrefresh(GAME_WIN);
+	}
+
+	if(lost) {
+		wattrset(STATUS_WIN, COLOR_PAIR(3) | A_BOLD);
+		pause_game("--- YOU LOST ---", 1);
 	}
 
 	// Freeing memory used for the snake
@@ -325,16 +333,25 @@ void play_round() {
 }
 
 void parse_arguments(int argc, char **argv) {
-	int arg;
-	while((arg = getopt(argc, argv, "oh")) != -1) {
+	int arg, color;
+	while((arg = getopt(argc, argv, "ohc:")) != -1) {
 		switch (arg) {
 			case 'o':
 				OPEN_BOUNDS = TRUE;
 				break;
+			case 'c':
+				color = atoi(optarg);
+				if((color >= 1) && (color <= 5)) {
+					SNAKE_COLOR = color;
+					break;
+				}
+			case '?':
+				// pass to help information
 			case 'h':
 				printf("Usage: %s [options]\n", argv[0]);
 				printf("Options:\n");
 				printf(" -o\tOuter bounds will let the snake pass through\n");
+				printf(" -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
 				printf(" -h\tDisplay this information\n");
 				exit(0);
 		}
@@ -351,7 +368,8 @@ int main(int argc, char **argv) {
 	init_pair(1, COLOR_WHITE, COLOR_BLACK); 
 	init_pair(2, COLOR_GREEN, COLOR_BLACK); 
 	init_pair(3, COLOR_RED, COLOR_BLACK); 
-	init_pair(4, COLOR_YELLOW, COLOR_BLACK); 
+	init_pair(4, COLOR_YELLOW, COLOR_BLACK);
+	init_pair(5, COLOR_BLUE, COLOR_BLACK); 
   	bkgd(COLOR_PAIR(1));
   	curs_set(FALSE);
 	noecho();
@@ -360,7 +378,7 @@ int main(int argc, char **argv) {
 
 	// Endless loop until the user quits the game
 	while(TRUE) {
-  		start_screen();
+  		show_startscreen();
   	}
 
 }
