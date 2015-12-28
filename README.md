@@ -19,6 +19,10 @@ Arguments:
 * **-h** displays help information
 * **-v** displays information about the version and license
 
+## Requirements
+* gcc
+* libncurses5
+
 ## How to compile
 
 ```
