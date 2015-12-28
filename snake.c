@@ -17,7 +17,7 @@
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 1
 // Version as string
-#define VERSION "a0.11"
+#define VERSION "a0.12"
 
 typedef enum Direction Direction;
 typedef struct SnakeCell SnakeCell;
@@ -41,6 +41,7 @@ static unsigned long HIGHSCORE;
 static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
 static int OPEN_BOUNDS = FALSE;
+static int SKIP_TITLE = FALSE;
 static int SNAKE_COLOR = 2;
 static const char *LOGO[] = {
 	" a88888b.          .d88888b                    dP               ",
@@ -106,6 +107,7 @@ void new_random_coordinates(SnakeCell *test_cell, int *x, int *y) {
 }
 
 void play_round() {
+	round_start:
   	// Init windows and max coordinates
 	getmaxyx(stdscr, MAX_Y, MAX_X);
 	GAME_WIN = subwin(stdscr, MAX_Y - 4, MAX_X, 0, 0);
@@ -171,7 +173,15 @@ void play_round() {
 		}else if(key == '\n') { // Enter-key
 			wattrset(STATUS_WIN, COLOR_PAIR(4) | A_BOLD);
 			pause_game("--- PAUSED ---", 0);
+		}else if(key == 'R') {
+			clear();
+			wrefresh(GAME_WIN);
+			goto round_start;
 		}else if(key == 'Q') {
+			// If the title screen is disabled we will exit the programm
+			if(SKIP_TITLE) {
+				clean_exit();
+			}
 			lost = FALSE;
 			break;
 		}else if(direction == HOLD) {
@@ -312,13 +322,14 @@ void play_round() {
 
 	// Freeing memory used for the snake
 	SnakeCell *tmp_cell;
-	while(cell->last != NULL) {
+	do {
 		tmp_cell = cell->last;
 		free(cell);
 		cell = tmp_cell;
-	}
-	free(cell);
+	} while(cell != NULL);
 
+	// Delete the screen content
+	clear();
 }
 
 void show_startscreen() {
@@ -370,11 +381,10 @@ void show_startscreen() {
 				move(anchor + 7 + i, 0);
 				clrtoeol();
 			}
-			print_centered(stdscr, anchor + 7, "--- Programmed by Philipp Hagenlocher ---");
+			print_centered(stdscr, anchor + 7, "--- Programming by Philipp Hagenlocher ---");
 			print_centered(stdscr, anchor + 8, "--- Start with -v to get information on the license ---");
 			print_centered(stdscr, anchor + 9, "--- Press any key! ---");
 			refresh();
-			timeout(-1);
 			getch();
 			break;
 		}
@@ -383,10 +393,13 @@ void show_startscreen() {
 
 void parse_arguments(int argc, char **argv) {
 	int arg, color;
-	while((arg = getopt(argc, argv, "ohvc:")) != -1) {
+	while((arg = getopt(argc, argv, "oshvc:")) != -1) {
 		switch (arg) {
 			case 'o':
 				OPEN_BOUNDS = TRUE;
+				break;
+			case 's':
+				SKIP_TITLE = TRUE;
 				break;
 			case 'c':
 				color = atoi(optarg);
@@ -401,6 +414,7 @@ void parse_arguments(int argc, char **argv) {
 				printf("Options:\n");
 				printf(" -o\tOuter bounds will let the snake pass through\n");
 				printf(" -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
+				printf(" -s\tSkip the titlescreen\n");
 				printf(" -h\tDisplay this information\n");
 				printf(" -v\tDisplay version and license information\n");
 				exit(0);
@@ -417,10 +431,6 @@ int main(int argc, char **argv) {
 	parse_arguments(argc, argv);
 	// Seed RNG with current time
 	srand(time(NULL));
-	// Allocating memory for buffer so that the text can be big enough to fill
-	// a whole row. Since it is always used to display centered text it doesn't
-	// have to be bigger.
-	TXT_BUF = malloc(sizeof(char) * MAX_X);
 	// Init colors and ncurses specific functions
 	initscr();
 	start_color();
@@ -435,9 +445,27 @@ int main(int argc, char **argv) {
 	cbreak();
 	keypad(stdscr, TRUE);
 
+	// Getting screen dimensions
+	getmaxyx(stdscr, MAX_Y, MAX_X);
+	// If the screen width is smaller than 64, the logo cannot be displayed
+	// and the titlescreen will most likely not work, so it is skipped.
+	// If the height is smaller than 15, the version cannot be displayed
+	// correctly so we have to skip the title.
+	if((MAX_X < 64) || (MAX_Y < 15)) {
+		SKIP_TITLE = TRUE;
+	}
+	// Allocating memory for buffer so that the text can be big enough to fill
+	// a whole row. Since it is always used to display centered text it doesn't
+	// have to be bigger.
+	TXT_BUF = malloc(sizeof(char) * MAX_X);
+
 	// Endless loop until the user quits the game
 	while(TRUE) {
-  		show_startscreen();
+		if(SKIP_TITLE) {
+			play_round();
+		} else {
+  			show_startscreen();
+  		}
   	}
 
 }
