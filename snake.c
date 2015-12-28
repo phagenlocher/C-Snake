@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <pwd.h>
 
 // Macro to get the x-coordinate for a string to be centered on screen
 #define centered(string) ((MAX_X / 2) - (strlen(string) / 2))
@@ -17,7 +18,8 @@
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 1
 // Version as string
-#define VERSION "a0.12"
+#define VERSION "a0.2"
+#define FILE_NAME ".csnake"
 
 typedef enum Direction Direction;
 typedef struct SnakeCell SnakeCell;
@@ -33,15 +35,17 @@ struct SnakeCell {
 
 // Globals
 static char *TXT_BUF; // Buffer used for format strings
+static char *FILE_PATH;
 static unsigned int MAX_X;
 static unsigned int MAX_Y;
 static unsigned int SPEED;
-static unsigned long POINTS;
-static unsigned long HIGHSCORE;
+static long long POINTS;
+static long long HIGHSCORE;
 static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
 static int OPEN_BOUNDS = FALSE;
 static int SKIP_TITLE = FALSE;
+static int IGNORE_FILES = FALSE;
 static int SNAKE_COLOR = 2;
 static const char *LOGO[] = {
 	" a88888b.          .d88888b                    dP               ",
@@ -52,8 +56,45 @@ static const char *LOGO[] = {
 	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"
 };
 
+void write_score_file() {
+	if(IGNORE_FILES) {
+		return;
+	}
+	char score_str[20];
+	sprintf(score_str, "%lld", HIGHSCORE);
+	FILE *save_file = fopen(FILE_PATH, "w");
+	fputs(score_str, save_file);
+	fclose(save_file);
+}
+
+void read_score_file() {
+	if(IGNORE_FILES) {
+		return;
+	}
+	char content[20];
+	// Allocate space for the home path, the filename, 1 '/' and the zero byte.
+	FILE_PATH = malloc(sizeof(char) * (strlen(getenv("HOME")) + strlen(FILE_NAME) + 2));
+	strcat(FILE_PATH, getenv("HOME"));
+	strcat(FILE_PATH, "/");
+	strcat(FILE_PATH, FILE_NAME);
+	FILE *save_file = fopen(FILE_PATH, "r");
+	if(save_file == NULL) {
+		HIGHSCORE = 0;
+		return;
+	}
+	// 19 characters are needed to display the max number for long long
+	fgets(content, 20, save_file);
+	HIGHSCORE = atoll(content);
+	fclose(save_file);
+}
+
 void clean_exit() {
+	// Write highscore to local file
+	write_score_file();
+	// Free buffers
 	free(TXT_BUF);
+	free(FILE_PATH);
+	// Delete windows
 	delwin(GAME_WIN);
 	delwin(STATUS_WIN);
 	endwin();
@@ -62,7 +103,7 @@ void clean_exit() {
 
 void print_points() {
 	wattrset(STATUS_WIN, A_UNDERLINE  | A_BOLD);
-	sprintf(TXT_BUF, "Score: %lu", POINTS);
+	sprintf(TXT_BUF, "Score: %lld", POINTS);
 	print_centered(STATUS_WIN, 1, TXT_BUF);
 	wrefresh(STATUS_WIN);
 }
@@ -318,6 +359,8 @@ void play_round() {
 	// Set a new highscore
 	if(POINTS > HIGHSCORE) {
 		HIGHSCORE = POINTS;
+		// Write highscore to local file
+		write_score_file();
 	}
 
 	// Freeing memory used for the snake
@@ -350,11 +393,11 @@ void show_startscreen() {
 
 	// If points != 0 print them to the screen
 	if(POINTS != 0) {
-		sprintf(TXT_BUF, "--- Last Score: %lu ---", POINTS);
+		sprintf(TXT_BUF, "--- Last Score: %lld ---", POINTS);
 		print_centered(stdscr, anchor + 8, TXT_BUF);
 	}
 	if(HIGHSCORE != 0) {
-		sprintf(TXT_BUF, "--- Highscore: %lu ---", HIGHSCORE);
+		sprintf(TXT_BUF, "--- Highscore: %lld ---", HIGHSCORE);
 		print_centered(stdscr, anchor + 9, TXT_BUF);
 	}
 	// Displaying information on open bounds
@@ -367,7 +410,7 @@ void show_startscreen() {
 	print_centered(stdscr, MAX_Y - 1, TXT_BUF);
 
 	// Wait for input
-	timeout(-1);
+	timeout(-1); // Set getch to blocking mode
 	while(TRUE) {
 		key = getch();
 		if((key == 'P') || (key == 'p')) {
@@ -393,13 +436,16 @@ void show_startscreen() {
 
 void parse_arguments(int argc, char **argv) {
 	int arg, color;
-	while((arg = getopt(argc, argv, "oshvc:")) != -1) {
+	while((arg = getopt(argc, argv, "osihvc:")) != -1) {
 		switch (arg) {
 			case 'o':
 				OPEN_BOUNDS = TRUE;
 				break;
 			case 's':
 				SKIP_TITLE = TRUE;
+				break;
+			case 'i':
+				IGNORE_FILES = TRUE;
 				break;
 			case 'c':
 				color = atoi(optarg);
@@ -415,6 +461,7 @@ void parse_arguments(int argc, char **argv) {
 				printf(" -o\tOuter bounds will let the snake pass through\n");
 				printf(" -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
 				printf(" -s\tSkip the titlescreen\n");
+				printf(" -i\tIgnore savefile (don't read or write)\n");
 				printf(" -h\tDisplay this information\n");
 				printf(" -v\tDisplay version and license information\n");
 				exit(0);
@@ -426,11 +473,12 @@ void parse_arguments(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
-
 	// Parse arguments
 	parse_arguments(argc, argv);
 	// Seed RNG with current time
 	srand(time(NULL));
+	// Read local highscore
+	read_score_file();
 	// Init colors and ncurses specific functions
 	initscr();
 	start_color();
