@@ -8,6 +8,16 @@
 #define centered(string) ((MAX_X / 2) - (strlen(string) / 2))
 // Macro to print a centered string on a window an a specific y-coordinate
 #define print_centered(window, y, string) ((mvwaddstr(window, y, centered(string), string)))
+// Constants important for gamplay
+#define STARTING_SPEED 150
+#define STARTING_LENGTH 5
+#define POINTS_COUNTER_VALUE 1000
+#define MIN_POINTS 100
+#define MIN_SPEED 50
+#define GROW_FACTOR 10
+#define SPEED_FACTOR 1
+// Version as string
+#define VERSION "a0.11"
 
 typedef enum Direction Direction;
 typedef struct SnakeCell SnakeCell;
@@ -22,7 +32,7 @@ struct SnakeCell {
 };
 
 // Globals
-static const char VERSION[] = "a0.1";
+static char *TXT_BUF; // Buffer used for format strings
 static unsigned int MAX_X;
 static unsigned int MAX_Y;
 static unsigned int SPEED;
@@ -34,27 +44,24 @@ static int OPEN_BOUNDS = FALSE;
 static int SNAKE_COLOR = 2;
 
 void clean_exit() {
+	free(TXT_BUF);
 	delwin(GAME_WIN);
 	delwin(STATUS_WIN);
-	delwin(stdscr);
 	endwin();
 	exit(0);
 }
 
 void print_points() {
 	wattrset(STATUS_WIN, A_UNDERLINE  | A_BOLD);
-	char *points_text = malloc(sizeof(char) * MAX_X);
-	sprintf(points_text, "Score: %lu", POINTS);
-	print_centered(STATUS_WIN, 1, points_text);
-	free(points_text);
+	sprintf(TXT_BUF, "Score: %lu", POINTS);
+	print_centered(STATUS_WIN, 1, TXT_BUF);
 	wrefresh(STATUS_WIN);
 }
 
 void pause_game(const char string[], const int seconds) {
-	int i;
 	print_centered(STATUS_WIN, 2, string);
 	wrefresh(STATUS_WIN);
-	
+
 	// Pausing for 0 seconds means waiting for input
 	if(seconds == 0) {
 		timeout(-1); // getch is in blocking mode
@@ -63,9 +70,8 @@ void pause_game(const char string[], const int seconds) {
 	} else {
 		sleep(seconds);
 	}
-	for(i = 1; i<MAX_X-1; i++) {
-		mvwaddch(STATUS_WIN, 2, i, ' ');
-	}
+	wmove(STATUS_WIN, 2, 0);
+	wclrtoeol(STATUS_WIN);
 	wrefresh(STATUS_WIN);
 }
 
@@ -95,21 +101,19 @@ void play_round() {
 	getmaxyx(GAME_WIN, MAX_Y, MAX_X);
 
 	// Set game specific timeout
-	SPEED = 150;
+	SPEED = STARTING_SPEED;
 	timeout(SPEED); // The timeout for getch() makes up the game speed
 
-	// Init RNG with current time
-	srand(time(NULL));
-
 	// Init variables
-	int key, x, y, growing, food_x, food_y, points_counter, lost;
+	int key, x, y, growing, food_x, food_y, points_counter, lost, length;
 	Direction direction, old_direction;
 	x = MAX_X / 2;
 	y = MAX_Y / 2;
 	POINTS = key = 0;
-	points_counter = 1000;
-	growing = 4;
+	points_counter = POINTS_COUNTER_VALUE;
+	growing = STARTING_LENGTH - 1;
 	lost = TRUE;
+	length = 1;
 	direction = old_direction = HOLD;
 
 	// Print points after they have been set to 0
@@ -145,7 +149,7 @@ void play_round() {
 			if(direction != LEFT)
 				direction = RIGHT;
 		}else if(key == KEY_UP) {
-			if(direction != DOWN) 
+			if(direction != DOWN)
 				direction = UP;
 		}else if(key == KEY_DOWN) {
 			if(direction != UP)
@@ -241,12 +245,12 @@ void play_round() {
 		// Head hits the food
 		if((x == food_x) && (y == food_y)) {
 			// Let the snake grow and change the speed
-			growing += 10;
-			if(SPEED > 50) {
-				SPEED -= 5;
+			growing += GROW_FACTOR;
+			if(SPEED > MIN_SPEED) {
+				SPEED -= SPEED_FACTOR;
 			}
-			POINTS += points_counter;
-			points_counter = 1000;
+			POINTS += points_counter + length;
+			points_counter = POINTS_COUNTER_VALUE;
 			timeout(SPEED);
 			print_points();
 			new_random_coordinates(cell, &food_x, &food_y);
@@ -274,7 +278,7 @@ void play_round() {
 		old_direction = direction;
 
 		// Decrement the points that will be added
-		if(points_counter > 100) {
+		if(points_counter > MIN_POINTS) {
 			points_counter--;
 		}
 
@@ -311,36 +315,37 @@ void show_startscreen() {
 	"88        88888888       `8b 88'  `88 88'  `88 88888'   88ooood8",
 	"Y8.   .88          d8'   .8P 88    88 88.  .88 88  `8b. 88.  ...",
 	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"};
-	const char instruction[] = "--- (P)lay Game --- (Q)uit ---";
+	const char instruction[] = "--- (P)lay Game --- (Q)uit --- (C)redits ---";
 	clear();
+	int anchor = MAX_Y / 4;
 	// Printing logo and instructions
 	attrset(COLOR_PAIR(SNAKE_COLOR) | A_BOLD);
 	for(i = 0; i<6; i++) {
-		print_centered(stdscr, (MAX_Y / 4) + i, logo[i]);
+		print_centered(stdscr, anchor + i, logo[i]);
 	}
 	attrset(COLOR_PAIR(1) | A_BOLD);
-	print_centered(stdscr, (MAX_Y / 4) + 7, instruction);
+	print_centered(stdscr, anchor + 7, instruction);
 
-	// The buffer is big enough to store a string that goes across the screen
-	char *text = malloc(sizeof(char) * MAX_X);
 	// If points != 0 print them to the screen
 	if(POINTS != 0) {
-		sprintf(text, "--- Last Score: %lu ---", POINTS);
-		print_centered(stdscr, (MAX_Y / 4) + 8, text);
+		sprintf(TXT_BUF, "--- Last Score: %lu ---", POINTS);
+		print_centered(stdscr, anchor + 8, TXT_BUF);
 	}
 	if(HIGHSCORE != 0) {
-		sprintf(text, "--- Highscore: %lu ---", HIGHSCORE);
-		print_centered(stdscr, (MAX_Y / 4) + 9, text);
+		sprintf(TXT_BUF, "--- Highscore: %lu ---", HIGHSCORE);
+		print_centered(stdscr, anchor + 9, TXT_BUF);
+	}
+	// Displaying information on open bounds
+	if(OPEN_BOUNDS) {
+		print_centered(stdscr, anchor + 10, "--- Playing with open bounds! ---");
 	}
 
-	// Printing verions
-	sprintf(text, "Version: %s", VERSION);
-	print_centered(stdscr, MAX_Y - 1, text);
-	free(text);
+	// Printing verion
+	sprintf(TXT_BUF, "Version: %s", VERSION);
+	print_centered(stdscr, MAX_Y - 1, TXT_BUF);
 
 	// Wait for input
 	timeout(-1);
-	attrset(A_NORMAL);
 	while(TRUE) {
 		key = getch();
 		if((key == 'P') || (key == 'p')) {
@@ -349,6 +354,18 @@ void show_startscreen() {
 			break;
 		}else if((key == 'Q') || (key == 'q')) {
 			clean_exit();
+		}else if((key == 'C') || (key == 'c')) {
+			for(i = 0; i<4; i++) {
+				move(anchor + 7 + i, 0);
+				clrtoeol();
+			}
+			print_centered(stdscr, anchor + 7, "--- Programmed by Philipp Hagenlocher ---");
+			print_centered(stdscr, anchor + 8, "--- Start with -v to get information on the license ---");
+			print_centered(stdscr, anchor + 9, "--- Press any key! ---");
+			refresh();
+			timeout(-1);
+			getch();
+			break;
 		}
 	}
 }
@@ -387,14 +404,20 @@ int main(int argc, char **argv) {
 
 	// Parse arguments
 	parse_arguments(argc, argv);
+	// Seed RNG with current time
+	srand(time(NULL));
+	// Allocating memory for buffer so that the text can be big enough to fill
+	// a whole row. Since it is always used to display centered text it doesn't
+	// have to be bigger.
+	TXT_BUF = malloc(sizeof(char) * MAX_X);
 	// Init colors and ncurses specific functions
 	initscr();
 	start_color();
-	init_pair(1, COLOR_WHITE, COLOR_BLACK); 
-	init_pair(2, COLOR_GREEN, COLOR_BLACK); 
-	init_pair(3, COLOR_RED, COLOR_BLACK); 
+	init_pair(1, COLOR_WHITE, COLOR_BLACK);
+	init_pair(2, COLOR_GREEN, COLOR_BLACK);
+	init_pair(3, COLOR_RED, COLOR_BLACK);
 	init_pair(4, COLOR_YELLOW, COLOR_BLACK);
-	init_pair(5, COLOR_BLUE, COLOR_BLACK); 
+	init_pair(5, COLOR_BLUE, COLOR_BLACK);
   	bkgd(COLOR_PAIR(1));
   	curs_set(FALSE);
 	noecho();
