@@ -42,6 +42,14 @@ static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
 static int OPEN_BOUNDS = FALSE;
 static int SNAKE_COLOR = 2;
+static const char *LOGO[] = {
+	" a88888b.          .d88888b                    dP               ",
+	"d8'   `88          88.    ''                   88               ", 
+	"88                 `Y88888b. 88d888b. .d8888b. 88  .dP  .d8888b.",
+	"88        88888888       `8b 88'  `88 88'  `88 88888'   88ooood8",
+	"Y8.   .88          d8'   .8P 88    88 88.  .88 88  `8b. 88.  ...",
+	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"
+};
 
 void clean_exit() {
 	free(TXT_BUF);
@@ -70,8 +78,13 @@ void pause_game(const char string[], const int seconds) {
 	} else {
 		sleep(seconds);
 	}
+	// Deleting second row
 	wmove(STATUS_WIN, 2, 0);
 	wclrtoeol(STATUS_WIN);
+	// Redrawing the box
+	wattrset(STATUS_WIN, A_NORMAL);
+	box(STATUS_WIN, 0, 0);
+	// Refreshing the window
 	wrefresh(STATUS_WIN);
 }
 
@@ -97,6 +110,7 @@ void play_round() {
 	getmaxyx(stdscr, MAX_Y, MAX_X);
 	GAME_WIN = subwin(stdscr, MAX_Y - 4, MAX_X, 0, 0);
 	STATUS_WIN = subwin(stdscr, 4, MAX_X, MAX_Y - 4, 0);
+	wattrset(STATUS_WIN, A_NORMAL);
 	box(STATUS_WIN, 0, 0);
 	getmaxyx(GAME_WIN, MAX_Y, MAX_X);
 
@@ -285,11 +299,13 @@ void play_round() {
 		wrefresh(GAME_WIN);
 	}
 
+	// lost is set to FALSE if the player quit the game
 	if(lost) {
 		wattrset(STATUS_WIN, COLOR_PAIR(3) | A_BOLD);
 		pause_game("--- YOU LOST ---", 2);
 	}
 
+	// Set a new highscore
 	if(POINTS > HIGHSCORE) {
 		HIGHSCORE = POINTS;
 	}
@@ -306,25 +322,20 @@ void play_round() {
 }
 
 void show_startscreen() {
-	int i, key;
+	int i, key, anchor;
+	// Getting screen dimensions
 	getmaxyx(stdscr, MAX_Y, MAX_X);
-	const char *logo[] = {
-	" a88888b.          .d88888b                    dP               ",
-	"d8'   `88          88.    ''                   88               ", 
-	"88                 `Y88888b. 88d888b. .d8888b. 88  .dP  .d8888b.",
-	"88        88888888       `8b 88'  `88 88'  `88 88888'   88ooood8",
-	"Y8.   .88          d8'   .8P 88    88 88.  .88 88  `8b. 88.  ...",
-	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"};
-	const char instruction[] = "--- (P)lay Game --- (Q)uit --- (C)redits ---";
+	// Setting anchor, where the text will start
+	anchor = MAX_Y / 4;
+	// Clear the whole screen
 	clear();
-	int anchor = MAX_Y / 4;
 	// Printing logo and instructions
 	attrset(COLOR_PAIR(SNAKE_COLOR) | A_BOLD);
 	for(i = 0; i<6; i++) {
-		print_centered(stdscr, anchor + i, logo[i]);
+		print_centered(stdscr, anchor + i, LOGO[i]);
 	}
 	attrset(COLOR_PAIR(1) | A_BOLD);
-	print_centered(stdscr, anchor + 7, instruction);
+	print_centered(stdscr, anchor + 7, "--- (P)lay Game --- (Q)uit --- (C)redits ---");
 
 	// If points != 0 print them to the screen
 	if(POINTS != 0) {
