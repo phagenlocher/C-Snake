@@ -17,19 +17,19 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 1
-#define VERSION "a0.2"
+#define VERSION "a0.21"
 #define FILE_NAME ".csnake"
 
 typedef enum Direction Direction;
-typedef struct SnakeCell SnakeCell;
+typedef struct LinkedCell LinkedCell;
 
 enum Direction {HOLD, UP, DOWN, RIGHT, LEFT};
 
-struct SnakeCell {
+struct LinkedCell {
 	int x;
 	int y;
-	SnakeCell *last;
-	SnakeCell *next;
+	LinkedCell *last;
+	LinkedCell *next;
 };
 
 // Globals
@@ -131,7 +131,7 @@ void pause_game(const char string[], const int seconds) {
 	wrefresh(STATUS_WIN);
 }
 
-int is_on_snake(SnakeCell *test_cell, const int x, const int y){
+int is_on_obstacle(LinkedCell *test_cell, const int x, const int y){
 	do{
 		if((test_cell->x == x) && (test_cell->y == y)) {
 			return TRUE;
@@ -141,11 +141,11 @@ int is_on_snake(SnakeCell *test_cell, const int x, const int y){
 	return FALSE;
 }
 
-void new_random_coordinates(SnakeCell *test_cell, int *x, int *y) {
+void new_random_coordinates(LinkedCell *test_cell, int *x, int *y) {
 	do {
 		*x = rand() % MAX_X;
 		*y = rand() % MAX_Y;
-	} while(is_on_snake(test_cell, *x, *y));
+	} while(is_on_obstacle(test_cell, *x, *y));
 }
 
 void play_round() {
@@ -178,14 +178,15 @@ void play_round() {
 	print_points();
 
 	// Create first cell for the snake
-	SnakeCell *cell = malloc(sizeof(SnakeCell));
-	cell->x = x;
-	cell->y = y;
-	cell->last = NULL;
-	cell->next = NULL;
+	LinkedCell *last_cell, *head = malloc(sizeof(LinkedCell));
+	head->x = x;
+	head->y = y;
+	head->last = NULL;
+	head->next = NULL;
+	last_cell = head;
 
 	// Init food coordinates
-	new_random_coordinates(cell, &food_x, &food_y);
+	new_random_coordinates(head, &food_x, &food_y);
 
 	// Game-Loop
 	while(TRUE) {
@@ -296,15 +297,15 @@ void play_round() {
 
 		// Draw head and create new cell for the head
 		mvwaddch(GAME_WIN,y,x,'X');
-		SnakeCell *new_cell = malloc(sizeof(SnakeCell));
+		LinkedCell *new_cell = malloc(sizeof(LinkedCell));
 		new_cell->x = x;
 		new_cell->y = y;
-		new_cell->last = cell;
-		cell->next = new_cell;
-		cell = new_cell;
+		new_cell->last = head;
+		head->next = new_cell;
+		head = new_cell;
 		// If the snake is moving (game has started) and the head hit the body
 		// of the snake the game is over.
-		if(is_on_snake(cell->last, x, y)) {
+		if(is_on_obstacle(head->last, x, y)) {
 			break;
 		}
 
@@ -315,26 +316,24 @@ void play_round() {
 			if(SPEED > MIN_SPEED) {
 				SPEED -= SPEED_FACTOR;
 			}
-			POINTS += points_counter + length;
+			POINTS += points_counter + length + (STARTING_SPEED - SPEED);
 			points_counter = POINTS_COUNTER_VALUE;
 			timeout(SPEED);
 			print_points();
-			new_random_coordinates(cell, &food_x, &food_y);
+			new_random_coordinates(head, &food_x, &food_y);
 		}
 
 		// If the snake is not growing...
 		if(growing == 0) {
-			// ...get the last cell...
-			SnakeCell *last_cell = cell->last;
-			while(last_cell->last != NULL) {
-				last_cell = last_cell->last;
-			}
-			// ...delete the character from the terminal...
+			LinkedCell *new_last;
+			// ...delete the last character from the terminal...
 			wattrset(GAME_WIN, A_NORMAL);
 			mvwaddch(GAME_WIN, last_cell->y,last_cell->x,' ');
 			// ...and free the memory for this cell.
 			last_cell->next->last = NULL;
+			new_last = last_cell->next;
 			free(last_cell);
+			last_cell = new_last;
 		} else {
 			// If the snake is growing and moving, just decrement 'growing'
 			growing--;
@@ -365,12 +364,12 @@ void play_round() {
 	}
 
 	// Freeing memory used for the snake
-	SnakeCell *tmp_cell;
+	LinkedCell *tmp_cell;
 	do {
-		tmp_cell = cell->last;
-		free(cell);
-		cell = tmp_cell;
-	} while(cell != NULL);
+		tmp_cell = head->last;
+		free(head);
+		head = tmp_cell;
+	} while(head != NULL);
 
 	// Delete the screen content
 	clear();
