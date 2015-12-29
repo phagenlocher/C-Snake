@@ -1,8 +1,8 @@
-snake: snake.c
-	gcc snake.c -lncurses -Ofast -funroll-loops -Wall -o snake
+csnake: snake.c
+	gcc snake.c -lncurses -Ofast -funroll-loops -Wall -o csnake
 
-install: snake
-	mv snake /usr/local/bin/snake
+install: csnake
+	mv csnake /usr/local/bin/csnake
 
 uninstall:
-	rm /usr/local/bin/snake
+	rm /usr/local/bin/csnake

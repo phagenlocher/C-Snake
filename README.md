@@ -24,9 +24,15 @@ Arguments:
 * **-h** displays help information
 * **-v** displays information about the version and license
 
-## Requirements
+## Requirements / Dependencies
 * gcc
+* make
 * libncurses5
+
+On Ubuntu or Debian you can use this install the dependencies:
+```
+apt-get install gcc make libncurses5-dev
+```
 
 ## How to compile
 

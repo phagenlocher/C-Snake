@@ -17,7 +17,6 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 1
-// Version as string
 #define VERSION "a0.2"
 #define FILE_NAME ".csnake"
 
@@ -47,6 +46,8 @@ static int OPEN_BOUNDS = FALSE;
 static int SKIP_TITLE = FALSE;
 static int IGNORE_FILES = FALSE;
 static int SNAKE_COLOR = 2;
+// Logo generated on http://www.network-science.de/ascii/
+// Used font: nancyj
 static const char *LOGO[] = {
 	" a88888b.          .d88888b                    dP               ",
 	"d8'   `88          88.    ''                   88               ", 
@@ -404,6 +405,9 @@ void show_startscreen() {
 	if(OPEN_BOUNDS) {
 		print_centered(stdscr, anchor + 10, "--- Playing with open bounds! ---");
 	}
+	if(IGNORE_FILES) {
+		print_centered(stdscr, anchor + 11, "--- Savefile is ignored! ---");
+	}
 
 	// Printing verion
 	sprintf(TXT_BUF, "Version: %s", VERSION);
@@ -420,7 +424,7 @@ void show_startscreen() {
 		}else if((key == 'Q') || (key == 'q')) {
 			clean_exit();
 		}else if((key == 'C') || (key == 'c')) {
-			for(i = 0; i<4; i++) {
+			for(i = 0; i<5; i++) {
 				move(anchor + 7 + i, 0);
 				clrtoeol();
 			}
@@ -497,9 +501,9 @@ int main(int argc, char **argv) {
 	getmaxyx(stdscr, MAX_Y, MAX_X);
 	// If the screen width is smaller than 64, the logo cannot be displayed
 	// and the titlescreen will most likely not work, so it is skipped.
-	// If the height is smaller than 15, the version cannot be displayed
+	// If the height is smaller than 17, the version cannot be displayed
 	// correctly so we have to skip the title.
-	if((MAX_X < 64) || (MAX_Y < 15)) {
+	if((MAX_X < 64) || (MAX_Y < 17)) {
 		SKIP_TITLE = TRUE;
 	}
 	// Allocating memory for buffer so that the text can be big enough to fill
