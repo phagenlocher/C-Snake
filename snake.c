@@ -17,8 +17,9 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 1
-#define VERSION "a0.21"
+#define VERSION "a0.22"
 #define FILE_NAME ".csnake"
+#define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
 typedef enum Direction Direction;
 typedef struct LinkedCell LinkedCell;
@@ -61,7 +62,7 @@ void write_score_file() {
 	if(IGNORE_FILES) {
 		return;
 	}
-	char score_str[20];
+	char score_str[FILE_LENGTH];
 	sprintf(score_str, "%lld", HIGHSCORE);
 	FILE *save_file = fopen(FILE_PATH, "w");
 	fputs(score_str, save_file);
@@ -72,7 +73,7 @@ void read_score_file() {
 	if(IGNORE_FILES) {
 		return;
 	}
-	char content[20];
+	char content[FILE_LENGTH];
 	// Allocate space for the home path, the filename, 1 '/' and the zero byte.
 	FILE_PATH = malloc(sizeof(char) * (strlen(getenv("HOME")) + strlen(FILE_NAME) + 2));
 	strcat(FILE_PATH, getenv("HOME"));
@@ -83,8 +84,7 @@ void read_score_file() {
 		HIGHSCORE = 0;
 		return;
 	}
-	// 19 characters are needed to display the max number for long long
-	fgets(content, 20, save_file);
+	fgets(content, FILE_LENGTH, save_file);
 	HIGHSCORE = atoll(content);
 	fclose(save_file);
 }
@@ -163,7 +163,7 @@ void play_round() {
 	timeout(SPEED); // The timeout for getch() makes up the game speed
 
 	// Init variables
-	int key, x, y, growing, food_x, food_y, points_counter, lost, length;
+	int key, x, y, growing, food_x, food_y, points_counter, lost, repeat, length;
 	Direction direction, old_direction;
 	x = MAX_X / 2;
 	y = MAX_Y / 2;
@@ -171,6 +171,7 @@ void play_round() {
 	points_counter = POINTS_COUNTER_VALUE;
 	growing = STARTING_LENGTH - 1;
 	lost = TRUE;
+	repeat = FALSE;
 	length = 1;
 	direction = old_direction = HOLD;
 
@@ -213,13 +214,13 @@ void play_round() {
 		}else if(key == KEY_DOWN) {
 			if(direction != UP)
 				direction = DOWN;
-		}else if(key == '\n') { // Enter-key
+		}else if((key == '\n') && (direction != HOLD)) { // Enter-key
 			wattrset(STATUS_WIN, COLOR_PAIR(4) | A_BOLD);
 			pause_game("--- PAUSED ---", 0);
 		}else if(key == 'R') {
-			clear();
-			wrefresh(GAME_WIN);
-			goto round_start;
+			lost = FALSE;
+			repeat = TRUE;
+			break;
 		}else if(key == 'Q') {
 			// If the title screen is disabled we will exit the programm
 			if(SKIP_TITLE) {
@@ -361,6 +362,9 @@ void play_round() {
 		HIGHSCORE = POINTS;
 		// Write highscore to local file
 		write_score_file();
+		// Display status
+		wattrset(STATUS_WIN, COLOR_PAIR(2) | A_BOLD);
+		pause_game("--- NEW HIGHSCORE ---", 2);
 	}
 
 	// Freeing memory used for the snake
@@ -373,6 +377,11 @@ void play_round() {
 
 	// Delete the screen content
 	clear();
+
+	// If we are repeating we are jumping to the start of the function
+	if(repeat) {
+		goto round_start;
+	}
 }
 
 void show_startscreen() {
