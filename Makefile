@@ -1,5 +1,8 @@
+CC = gcc
+CFLAGS = -lncurses -Os -funroll-loops -fPIE -fshort-enums -Wall
+
 csnake: snake.c
-	gcc snake.c -lncurses -Ofast -funroll-loops -Wall -o csnake
+	$(CC) $(CFLAGS) snake.c -o csnake
 
 install: csnake
 	mv csnake /usr/local/bin/csnake
