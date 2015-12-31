@@ -51,6 +51,7 @@ static int OPEN_BOUNDS = FALSE;
 static int SKIP_TITLE = FALSE;
 static int IGNORE_FILES = FALSE;
 static int WALLS_ACTIVE = FALSE;
+static int WALL_PATTERN;
 static int SNAKE_COLOR = 2;
 // Logo generated on http://www.network-science.de/ascii/
 // Used font: nancyj
@@ -168,11 +169,10 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		wall->x = constant;
 		wall->y = start;
 	}
-	wall->last = NULL;
+	wall->last = last_cell;
 	wall->next = NULL;
 
 	if(last_cell != NULL) {
-		wall->last = last_cell;
 		last_cell->next = wall;
 	}
 
@@ -289,14 +289,29 @@ void play_round() {
 	last_cell = head;
 
 	// Creating walls (all walls are referenced by one pointer)
-	LinkedCell *wall;
+	LinkedCell *wall = NULL;
 	if(WALLS_ACTIVE) {
-		wall = create_wall(0, MAX_Y / 4, MAX_X / 2, DOWN, NULL);
-		wall = create_wall(MAX_Y, 3 * MAX_Y / 4, MAX_X / 2, UP, wall);
-		wall = create_wall(0, MAX_X / 4, MAX_Y / 2, RIGHT, wall);
-		wall = create_wall(MAX_X, 3 * MAX_X / 4, MAX_Y / 2, LEFT, wall);
-	} else {
-		wall = NULL;
+		switch (WALL_PATTERN) {
+			case 1:
+				wall = create_wall(0, MAX_Y / 4, MAX_X / 2, DOWN, NULL);
+				wall = create_wall(MAX_Y, 3 * MAX_Y / 4, MAX_X / 2, UP, wall);
+				wall = create_wall(0, MAX_X / 4, MAX_Y / 2, RIGHT, wall);
+				wall = create_wall(MAX_X, 3 * MAX_X / 4, MAX_Y / 2, LEFT, wall);
+				break;
+			case 2:
+				wall = create_wall(MAX_Y / 4, 3 * MAX_Y / 4, MAX_X / 4, DOWN, NULL);
+				wall = create_wall(MAX_Y / 4, 3 * MAX_Y / 4, 3 * MAX_X / 4, DOWN, wall);
+				break;
+			case 3:
+				wall = create_wall(MAX_X / 4, 3 * MAX_X / 4, MAX_Y / 4, RIGHT, NULL);
+				wall = create_wall(MAX_X / 4, 3 * MAX_X / 4, 3 * MAX_Y / 4, RIGHT, wall);
+				break;
+			default:
+				// Random wall generation
+
+				// TODO
+				break;
+		}
 	}
 
 	// Init food coordinates
@@ -525,12 +540,15 @@ void show_startscreen() {
 		sprintf(TXT_BUF, "--- Highscore: %lld ---", HIGHSCORE);
 		print_centered(stdscr, anchor + 9, TXT_BUF);
 	}
-	// Displaying information on open bounds
+	// Displaying information on options
 	if(OPEN_BOUNDS) {
 		print_centered(stdscr, anchor + 10, "--- Playing with open bounds! ---");
 	}
+	if(WALLS_ACTIVE) {
+		print_centered(stdscr, anchor + 11, "--- Walls are activated (Experimental)! ---");
+	}
 	if(IGNORE_FILES) {
-		print_centered(stdscr, anchor + 11, "--- Savefile is ignored! ---");
+		print_centered(stdscr, anchor + 12, "--- Savefile is ignored! ---");
 	}
 
 	// Printing verion
@@ -550,8 +568,11 @@ void show_startscreen() {
 		}else if((key == 'O') || (key == 'o')) {
 			OPEN_BOUNDS = !OPEN_BOUNDS;
 			break;
+		}else if((key == 'W') || (key == 'w')) {
+			WALLS_ACTIVE = !WALLS_ACTIVE;
+			break;
 		}else if((key == 'C') || (key == 'c')) {
-			for(i = 0; i<5; i++) {
+			for(i = 0; i<7; i++) {
 				move(anchor + 7 + i, 0);
 				clrtoeol();
 			}
@@ -566,8 +587,8 @@ void show_startscreen() {
 }
 
 void parse_arguments(int argc, char **argv) {
-	int arg, color;
-	while((arg = getopt(argc, argv, "osiwhvc:")) != -1) {
+	int arg, color, pattern;
+	while((arg = getopt(argc, argv, "osiw:c:hv")) != -1) {
 		switch (arg) {
 			case 'o':
 				OPEN_BOUNDS = TRUE;
@@ -579,8 +600,13 @@ void parse_arguments(int argc, char **argv) {
 				IGNORE_FILES = TRUE;
 				break;
 			case 'w':
-				WALLS_ACTIVE = TRUE;
-				break;
+				pattern = atoi(optarg);
+				if((pattern >= 0) && (pattern <= 3)) {
+					WALLS_ACTIVE = TRUE;
+					WALL_PATTERN = pattern;
+					break;
+				}
+				goto help_text;
 			case 'c':
 				color = atoi(optarg);
 				if((color >= 1) && (color <= 5)) {
@@ -590,13 +616,14 @@ void parse_arguments(int argc, char **argv) {
 			case '?': // Invalid parameter
 				// pass to help information
 			case 'h':
+				help_text:
 				printf("Usage: %s [options]\n", argv[0]);
 				printf("Options:\n");
 				printf(" -o\tOuter bounds will let the snake pass through\n");
+				printf(" -w <0-3>\n\tPlay with walls! The number specifies the predefined pattern. (0 is random!)\n");
 				printf(" -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
-				printf(" -w\tPlay with walls (experimental)\n");
 				printf(" -s\tSkip the titlescreen\n");
-				printf(" -i\tIgnore savefile (don't read or write)\n");
+				printf(" -i\tIgnore savefile (don't read nor write)\n");
 				printf(" -h\tDisplay this information\n");
 				printf(" -v\tDisplay version and license information\n");
 				exit(0);
@@ -632,9 +659,9 @@ int main(int argc, char **argv) {
 	getmaxyx(stdscr, MAX_Y, MAX_X);
 	// If the screen width is smaller than 64, the logo cannot be displayed
 	// and the titlescreen will most likely not work, so it is skipped.
-	// If the height is smaller than 17, the version cannot be displayed
+	// If the height is smaller than 18, the version cannot be displayed
 	// correctly so we have to skip the title.
-	if((MAX_X < 64) || (MAX_Y < 17)) {
+	if((MAX_X < 64) || (MAX_Y < 18)) {
 		SKIP_TITLE = TRUE;
 	}
 	// Allocating memory for buffer so that the text can be big enough to fill
