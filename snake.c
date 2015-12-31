@@ -8,7 +8,11 @@
 // Macro to get the x-coordinate for a string to be centered on screen
 #define centered(string) ((MAX_X / 2) - (strlen(string) / 2))
 // Macro to print a centered string on a window an a specific y-coordinate
-#define print_centered(window, y, string) ((mvwaddstr(window, y, centered(string), string)))
+#define print_centered(window, y, string) (mvwaddstr(window, y, centered(string), string))
+// Direction macros
+#define is_horizontal(direction) ((direction == LEFT) || (direction == RIGHT))
+#define is_vertical(direction) ((direction == UP) || (direction == DOWN))
+
 // Constants important for gamplay
 #define STARTING_SPEED 150
 #define STARTING_LENGTH 5
@@ -17,7 +21,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 1
-#define VERSION "a0.22"
+#define VERSION "a0.30"
 #define FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -46,6 +50,7 @@ static WINDOW *STATUS_WIN;
 static int OPEN_BOUNDS = FALSE;
 static int SKIP_TITLE = FALSE;
 static int IGNORE_FILES = FALSE;
+static int WALLS_ACTIVE = FALSE;
 static int SNAKE_COLOR = 2;
 // Logo generated on http://www.network-science.de/ascii/
 // Used font: nancyj
@@ -132,6 +137,10 @@ void pause_game(const char string[], const int seconds) {
 }
 
 int is_on_obstacle(LinkedCell *test_cell, const int x, const int y){
+	if(test_cell == NULL) {
+		return FALSE;
+	}
+
 	do{
 		if((test_cell->x == x) && (test_cell->y == y)) {
 			return TRUE;
@@ -141,11 +150,104 @@ int is_on_obstacle(LinkedCell *test_cell, const int x, const int y){
 	return FALSE;
 }
 
-void new_random_coordinates(LinkedCell *test_cell, int *x, int *y) {
+void new_random_coordinates(LinkedCell *snake, LinkedCell *wall, int *x, int *y) {
 	do {
 		*x = rand() % MAX_X;
 		*y = rand() % MAX_Y;
-	} while(is_on_obstacle(test_cell, *x, *y));
+	} while(is_on_obstacle(snake, *x, *y) || is_on_obstacle(wall, *x, *y));
+}
+
+LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedCell *last_cell) {
+	int i;
+	LinkedCell *new_wall, *wall = malloc(sizeof(LinkedCell));
+
+	if(is_horizontal(dir)) {
+		wall->x = start;
+		wall->y = constant;
+	} else {
+		wall->x = constant;
+		wall->y = start;
+	}
+	wall->last = NULL;
+	wall->next = NULL;
+
+	if(last_cell != NULL) {
+		wall->last = last_cell;
+		last_cell->next = wall;
+	}
+
+	switch (dir) {
+		case UP:
+			for(i = start-1; i > end; i--) {
+				new_wall = malloc(sizeof(LinkedCell));
+				new_wall->x = constant;
+				new_wall->y = i;
+				new_wall->last = wall;
+				new_wall->next = NULL;
+				wall->next = new_wall;
+				wall = new_wall;
+			}
+			break;
+		case DOWN:
+			for(i = start+1; i < end; i++) {
+				new_wall = malloc(sizeof(LinkedCell));
+				new_wall->x = constant;
+				new_wall->y = i;
+				new_wall->last = wall;
+				new_wall->next = NULL;
+				wall->next = new_wall;
+				wall = new_wall;
+			}
+			break;
+		case LEFT:
+			for(i = start-1; i > end; i--) {
+				new_wall = malloc(sizeof(LinkedCell));
+				new_wall->x = i;
+				new_wall->y = constant;
+				new_wall->last = wall;
+				new_wall->next = NULL;
+				wall->next = new_wall;
+				wall = new_wall;
+			}
+			break;
+		case RIGHT:
+			for(i = start+1; i < end; i++) {
+				new_wall = malloc(sizeof(LinkedCell));
+				new_wall->x = i;
+				new_wall->y = constant;
+				new_wall->last = wall;
+				new_wall->next = NULL;
+				wall->next = new_wall;
+				wall = new_wall;
+			}
+			break;
+		case HOLD:
+			break;
+	}
+
+	LinkedCell *tmp_cell1, *tmp_cell2;
+	tmp_cell2 = wall;
+	wattrset(GAME_WIN, COLOR_PAIR(5) | A_BOLD);
+	do {
+		tmp_cell1 = tmp_cell2;
+		mvwaddch(GAME_WIN, tmp_cell1->y, tmp_cell1->x, ACS_CKBOARD);
+		tmp_cell2 = tmp_cell1->last;
+	} while(tmp_cell2 != NULL);
+
+	return wall;
+}
+
+void free_linked_list(LinkedCell *cell) {
+	if(cell == NULL) {
+		return;
+	}
+
+	LinkedCell *tmp_cell;
+	do {
+		tmp_cell = cell->last;
+		free(cell);
+		cell = tmp_cell;
+	} while(cell != NULL);
 }
 
 void play_round() {
@@ -186,8 +288,19 @@ void play_round() {
 	head->next = NULL;
 	last_cell = head;
 
+	// Creating walls (all walls are referenced by one pointer)
+	LinkedCell *wall;
+	if(WALLS_ACTIVE) {
+		wall = create_wall(0, MAX_Y / 4, MAX_X / 2, DOWN, NULL);
+		wall = create_wall(MAX_Y, 3 * MAX_Y / 4, MAX_X / 2, UP, wall);
+		wall = create_wall(0, MAX_X / 4, MAX_Y / 2, RIGHT, wall);
+		wall = create_wall(MAX_X, 3 * MAX_X / 4, MAX_Y / 2, LEFT, wall);
+	} else {
+		wall = NULL;
+	}
+
 	// Init food coordinates
-	new_random_coordinates(head, &food_x, &food_y);
+	new_random_coordinates(head, wall, &food_x, &food_y);
 
 	// Game-Loop
 	while(TRUE) {
@@ -304,12 +417,17 @@ void play_round() {
 		new_cell->last = head;
 		head->next = new_cell;
 		head = new_cell;
-		// If the snake is moving (game has started) and the head hit the body
-		// of the snake the game is over.
+
+		// The snake hits itself and dies
 		if(is_on_obstacle(head->last, x, y)) {
 			break;
 		}
 
+		// The snake hits a wall and dies
+		if(is_on_obstacle(wall, x, y)) {
+			break;
+		}
+		
 		// Head hits the food
 		if((x == food_x) && (y == food_y)) {
 			// Let the snake grow and change the speed
@@ -321,7 +439,7 @@ void play_round() {
 			points_counter = POINTS_COUNTER_VALUE;
 			timeout(SPEED);
 			print_points();
-			new_random_coordinates(head, &food_x, &food_y);
+			new_random_coordinates(head, wall, &food_x, &food_y);
 		}
 
 		// If the snake is not growing...
@@ -368,12 +486,10 @@ void play_round() {
 	}
 
 	// Freeing memory used for the snake
-	LinkedCell *tmp_cell;
-	do {
-		tmp_cell = head->last;
-		free(head);
-		head = tmp_cell;
-	} while(head != NULL);
+	free_linked_list(head);
+
+	// Freeing memory used for the walls
+	free_linked_list(wall);
 
 	// Delete the screen content
 	clear();
@@ -431,6 +547,9 @@ void show_startscreen() {
 			break;
 		}else if((key == 'Q') || (key == 'q')) {
 			clean_exit();
+		}else if((key == 'O') || (key == 'o')) {
+			OPEN_BOUNDS = !OPEN_BOUNDS;
+			break;
 		}else if((key == 'C') || (key == 'c')) {
 			for(i = 0; i<5; i++) {
 				move(anchor + 7 + i, 0);
@@ -448,7 +567,7 @@ void show_startscreen() {
 
 void parse_arguments(int argc, char **argv) {
 	int arg, color;
-	while((arg = getopt(argc, argv, "osihvc:")) != -1) {
+	while((arg = getopt(argc, argv, "osiwhvc:")) != -1) {
 		switch (arg) {
 			case 'o':
 				OPEN_BOUNDS = TRUE;
@@ -458,6 +577,9 @@ void parse_arguments(int argc, char **argv) {
 				break;
 			case 'i':
 				IGNORE_FILES = TRUE;
+				break;
+			case 'w':
+				WALLS_ACTIVE = TRUE;
 				break;
 			case 'c':
 				color = atoi(optarg);
@@ -472,6 +594,7 @@ void parse_arguments(int argc, char **argv) {
 				printf("Options:\n");
 				printf(" -o\tOuter bounds will let the snake pass through\n");
 				printf(" -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
+				printf(" -w\tPlay with walls (experimental)\n");
 				printf(" -s\tSkip the titlescreen\n");
 				printf(" -i\tIgnore savefile (don't read or write)\n");
 				printf(" -h\tDisplay this information\n");
