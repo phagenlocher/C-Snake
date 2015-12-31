@@ -21,7 +21,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 1
-#define VERSION "a0.31"
+#define VERSION "a0.32"
 #define FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -578,9 +578,6 @@ void show_startscreen() {
 			clean_exit();
 		}else if((key == 'O') || (key == 'o')) {
 			OPEN_BOUNDS = !OPEN_BOUNDS;
-			break;
-		}else if((key == 'W') || (key == 'w')) {
-			WALLS_ACTIVE = !WALLS_ACTIVE;
 			break;
 		}else if((key == 'C') || (key == 'c')) {
 			for(i = 0; i<7; i++) {
