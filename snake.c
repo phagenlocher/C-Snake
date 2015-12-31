@@ -21,7 +21,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 1
-#define VERSION "a0.30"
+#define VERSION "a0.31"
 #define FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -290,6 +290,7 @@ void play_round() {
 
 	// Creating walls (all walls are referenced by one pointer)
 	LinkedCell *wall = NULL;
+	int bigger, smaller, constant, i;
 	if(WALLS_ACTIVE) {
 		switch (WALL_PATTERN) {
 			case 1:
@@ -307,9 +308,19 @@ void play_round() {
 				wall = create_wall(MAX_X / 4, 3 * MAX_X / 4, 3 * MAX_Y / 4, RIGHT, wall);
 				break;
 			default:
-				// Random wall generation
-
-				// TODO
+				// Random wall creation
+				for(i = 0; i<2; i++) {
+					constant = rand() % MAX_X;
+					smaller = (rand() % MAX_Y) / 2;
+					bigger = smaller + (rand() % MAX_Y) / 2;
+					wall = create_wall(smaller, bigger, constant, DOWN, wall);
+				}
+				for(i = 0; i<2; i++) {
+					constant = rand() % MAX_Y;
+					smaller = (rand() % MAX_X) / 2;
+					bigger = smaller + (rand() % MAX_X) / 2;
+					wall = create_wall(smaller, bigger, constant, RIGHT, wall);
+				}
 				break;
 		}
 	}
