@@ -21,6 +21,7 @@ Arguments:
 * **-w <0-4>** activates the usage of walls within the level. *1-4* are predefined wall patterns and *0* are randomly created walls.
 * **-c <1-5>** changes the color of the snake
 * **-s** skips the titlescreen
+* **-r** removes the savefile
 * **-i** will ignore the savefile
 * **-h** displays help information
 * **-v** displays information about the version and license

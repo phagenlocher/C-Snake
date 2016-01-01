@@ -21,7 +21,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 1
-#define VERSION "a0.33"
+#define VERSION "a0.34"
 #define FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -64,6 +64,15 @@ static const char *LOGO[] = {
 	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"
 };
 
+
+void init_save_file_path() {
+	// Allocate space for the home path, the filename, 1 '/' and the zero byte.
+	FILE_PATH = malloc(sizeof(char) * (strlen(getenv("HOME")) + strlen(FILE_NAME) + 2));
+	strcat(FILE_PATH, getenv("HOME"));
+	strcat(FILE_PATH, "/");
+	strcat(FILE_PATH, FILE_NAME);
+}
+
 void write_score_file() {
 	if(IGNORE_FILES) {
 		return;
@@ -80,11 +89,6 @@ void read_score_file() {
 		return;
 	}
 	char content[FILE_LENGTH];
-	// Allocate space for the home path, the filename, 1 '/' and the zero byte.
-	FILE_PATH = malloc(sizeof(char) * (strlen(getenv("HOME")) + strlen(FILE_NAME) + 2));
-	strcat(FILE_PATH, getenv("HOME"));
-	strcat(FILE_PATH, "/");
-	strcat(FILE_PATH, FILE_NAME);
 	FILE *save_file = fopen(FILE_PATH, "r");
 	if(save_file == NULL) {
 		HIGHSCORE = 0;
@@ -607,7 +611,7 @@ void show_startscreen() {
 
 void parse_arguments(int argc, char **argv) {
 	int arg, color, pattern;
-	while((arg = getopt(argc, argv, "osiw:c:hv")) != -1) {
+	while((arg = getopt(argc, argv, "osirw:c:hv")) != -1) {
 		switch (arg) {
 			case 'o':
 				OPEN_BOUNDS = TRUE;
@@ -618,6 +622,10 @@ void parse_arguments(int argc, char **argv) {
 			case 'i':
 				IGNORE_FILES = TRUE;
 				break;
+			case 'r':
+				remove(FILE_PATH);
+				free(FILE_PATH);
+				exit(0);
 			case 'w':
 				pattern = atoi(optarg);
 				if((pattern >= 0) && (pattern <= 4)) {
@@ -642,6 +650,7 @@ void parse_arguments(int argc, char **argv) {
 				printf(" -w <0-4>\n\tPlay with walls! The number specifies the predefined pattern. (0 is random!)\n");
 				printf(" -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
 				printf(" -s\tSkip the titlescreen\n");
+				printf(" -r\tRemoves the savefile\n");
 				printf(" -i\tIgnore savefile (don't read nor write)\n");
 				printf(" -h\tDisplay this information\n");
 				printf(" -v\tDisplay version and license information\n");
@@ -654,6 +663,7 @@ void parse_arguments(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+	init_save_file_path();
 	// Parse arguments
 	parse_arguments(argc, argv);
 	// Seed RNG with current time
