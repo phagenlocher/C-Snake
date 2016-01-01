@@ -126,7 +126,7 @@ void pause_game(const char string[], const int seconds) {
 		timeout(SPEED); // getch is in nonblocking mode
 	} else {
 		sleep(seconds);
-		flushinp();
+		flushinp(); // Flush typeahead during sleep
 	}
 	// Deleting second row
 	wmove(STATUS_WIN, 2, 0);

@@ -18,7 +18,7 @@ Rules:
 
 Arguments:
 * **-o** will make the outer bounds open so you can exit the screen and come out on the other side!
-* **-w <0-4>** activates the usage of walls within the level. *1-3* are predefined wall patterns and *0* are randomly created walls.
+* **-w <0-4>** activates the usage of walls within the level. *1-4* are predefined wall patterns and *0* are randomly created walls.
 * **-c <1-5>** changes the color of the snake
 * **-s** skips the titlescreen
 * **-i** will ignore the savefile
