@@ -126,6 +126,7 @@ void pause_game(const char string[], const int seconds) {
 		timeout(SPEED); // getch is in nonblocking mode
 	} else {
 		sleep(seconds);
+		flushinp();
 	}
 	// Deleting second row
 	wmove(STATUS_WIN, 2, 0);
@@ -312,8 +313,8 @@ void play_round() {
 				wall = create_wall(MAX_Y / 4, MAX_Y / 2 - 1, MAX_X / 4, DOWN, wall);
 				wall = create_wall(MAX_Y / 2 + 2, 3 * MAX_Y / 4, 3 * MAX_X / 4, DOWN, wall);
 				wall = create_wall(MAX_Y / 4, MAX_Y / 2 - 1, 3 * MAX_X / 4, DOWN, wall);
-				wall = create_wall(MAX_X / 4, MAX_X / 2 - 2, MAX_Y / 4, RIGHT, wall);
-				wall = create_wall(MAX_X / 4, MAX_X / 2 - 2, 3 * MAX_Y / 4, RIGHT, wall);
+				wall = create_wall(MAX_X / 4, MAX_X / 2 - 1, MAX_Y / 4, RIGHT, wall);
+				wall = create_wall(MAX_X / 4, MAX_X / 2 - 1, 3 * MAX_Y / 4, RIGHT, wall);
 				wall = create_wall(MAX_X / 2 + 2, 3 * MAX_X / 4, MAX_Y / 4, RIGHT, wall);
 				wall = create_wall(MAX_X / 2 + 2, 3 * MAX_X / 4 + 1, 3 * MAX_Y / 4, RIGHT, wall);
 				break;
