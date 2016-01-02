@@ -21,7 +21,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 1
-#define VERSION "a0.34"
+#define VERSION "a0.35"
 #define FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -175,11 +175,6 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		wall->y = start;
 	}
 	wall->last = last_cell;
-	wall->next = NULL;
-
-	if(last_cell != NULL) {
-		last_cell->next = wall;
-	}
 
 	switch (dir) {
 		case UP:
@@ -188,8 +183,6 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 				new_wall->x = constant;
 				new_wall->y = i;
 				new_wall->last = wall;
-				new_wall->next = NULL;
-				wall->next = new_wall;
 				wall = new_wall;
 			}
 			break;
@@ -199,8 +192,6 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 				new_wall->x = constant;
 				new_wall->y = i;
 				new_wall->last = wall;
-				new_wall->next = NULL;
-				wall->next = new_wall;
 				wall = new_wall;
 			}
 			break;
@@ -210,8 +201,6 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 				new_wall->x = i;
 				new_wall->y = constant;
 				new_wall->last = wall;
-				new_wall->next = NULL;
-				wall->next = new_wall;
 				wall = new_wall;
 			}
 			break;
@@ -221,8 +210,6 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 				new_wall->x = i;
 				new_wall->y = constant;
 				new_wall->last = wall;
-				new_wall->next = NULL;
-				wall->next = new_wall;
 				wall = new_wall;
 			}
 			break;
@@ -321,6 +308,16 @@ void play_round() {
 				wall = create_wall(MAX_X / 4, MAX_X / 2 - 1, 3 * MAX_Y / 4, RIGHT, wall);
 				wall = create_wall(MAX_X / 2 + 2, 3 * MAX_X / 4, MAX_Y / 4, RIGHT, wall);
 				wall = create_wall(MAX_X / 2 + 2, 3 * MAX_X / 4 + 1, 3 * MAX_Y / 4, RIGHT, wall);
+				break;
+			case 5:
+				wall = create_wall(0, MAX_Y / 4, MAX_X / 4, DOWN, NULL);
+				wall = create_wall(0, MAX_Y / 4, 3 * MAX_X / 4, DOWN, wall);
+				wall = create_wall(0, MAX_Y / 4, MAX_X / 2, DOWN, wall);
+				wall = create_wall(MAX_Y, 3 * MAX_Y / 4, MAX_X / 4, UP, wall);
+				wall = create_wall(MAX_Y, 3 * MAX_Y / 4, 3 * MAX_X / 4, UP, wall);
+				wall = create_wall(MAX_Y, 3 * MAX_Y / 4, MAX_X / 2, UP, wall);
+				wall = create_wall(0, MAX_X / 4, MAX_Y / 2, RIGHT, wall);
+				wall = create_wall(MAX_X, 3 * MAX_X / 4, MAX_Y / 2, LEFT, wall);
 				break;
 			default:
 				// Random wall creation
@@ -571,7 +568,7 @@ void show_startscreen() {
 		print_centered(stdscr, anchor + 10, "--- Playing with open bounds! ---");
 	}
 	if(WALLS_ACTIVE) {
-		print_centered(stdscr, anchor + 11, "--- Walls are activated (Experimental)! ---");
+		print_centered(stdscr, anchor + 11, "--- Walls are activated! ---");
 	}
 	if(IGNORE_FILES) {
 		print_centered(stdscr, anchor + 12, "--- Savefile is ignored! ---");
@@ -628,7 +625,7 @@ void parse_arguments(int argc, char **argv) {
 				exit(0);
 			case 'w':
 				pattern = atoi(optarg);
-				if((pattern >= 0) && (pattern <= 4)) {
+				if((pattern >= 0) && (pattern <= 5)) {
 					WALLS_ACTIVE = TRUE;
 					WALL_PATTERN = pattern;
 					break;
@@ -647,7 +644,7 @@ void parse_arguments(int argc, char **argv) {
 				printf("Usage: %s [options]\n", argv[0]);
 				printf("Options:\n");
 				printf(" -o\tOuter bounds will let the snake pass through\n");
-				printf(" -w <0-4>\n\tPlay with walls! The number specifies the predefined pattern. (0 is random!)\n");
+				printf(" -w <0-5>\n\tPlay with walls! The number specifies the predefined pattern. (0 is random!)\n");
 				printf(" -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
 				printf(" -s\tSkip the titlescreen\n");
 				printf(" -r\tRemoves the savefile\n");
