@@ -20,8 +20,8 @@
 #define MIN_POINTS 100
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
-#define SPEED_FACTOR 1
-#define VERSION "a0.35"
+#define SPEED_FACTOR 2
+#define VERSION "a0.36"
 #define FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -67,7 +67,7 @@ static const char *LOGO[] = {
 
 void init_save_file_path() {
 	// Allocate space for the home path, the filename, 1 '/' and the zero byte.
-	FILE_PATH = malloc(sizeof(char) * (strlen(getenv("HOME")) + strlen(FILE_NAME) + 2));
+	FILE_PATH = malloc((strlen(getenv("HOME")) + strlen(FILE_NAME) + 2));
 	strcat(FILE_PATH, getenv("HOME"));
 	strcat(FILE_PATH, "/");
 	strcat(FILE_PATH, FILE_NAME);
@@ -282,7 +282,7 @@ void play_round() {
 
 	// Creating walls (all walls are referenced by one pointer)
 	LinkedCell *wall = NULL;
-	int bigger, smaller, constant, i;
+	int bigger, smaller, constant;
 	if(WALLS_ACTIVE) {
 		switch (WALL_PATTERN) {
 			case 1:
@@ -321,18 +321,17 @@ void play_round() {
 				break;
 			default:
 				// Random wall creation
-				for(i = 0; i<4; i++) {
-					constant = rand() % MAX_X;
-					smaller = (rand() % MAX_Y) / 2;
-					bigger = smaller + (rand() % MAX_Y) / 2;
-					wall = create_wall(smaller, bigger, constant, DOWN, wall);
-				}
-				for(i = 0; i<4; i++) {
-					constant = rand() % MAX_Y;
-					smaller = (rand() % MAX_X) / 2;
-					bigger = smaller + (rand() % MAX_X) / 2;
-					wall = create_wall(smaller, bigger, constant, RIGHT, wall);
-				}
+				constant = rand() % (MAX_Y / 2 - 1);
+				smaller = (rand() % (MAX_X - 4)) / 2;
+				bigger = MAX_X - smaller;
+				wall = create_wall(smaller, bigger, constant, RIGHT, NULL);
+				wall = create_wall(smaller, bigger, MAX_Y - constant - 1, RIGHT, wall);
+		
+				constant = rand() % (smaller - 1);
+				smaller = (rand() % MAX_Y) / 2;
+				bigger = MAX_Y - smaller + 1;
+				wall = create_wall(smaller, bigger, constant, DOWN, wall);
+				wall = create_wall(smaller, bigger, MAX_X - constant, DOWN, wall);
 				break;
 		}
 	}
@@ -693,7 +692,7 @@ int main(int argc, char **argv) {
 	// Allocating memory for buffer so that the text can be big enough to fill
 	// a whole row. Since it is always used to display centered text it doesn't
 	// have to be bigger.
-	TXT_BUF = malloc(sizeof(char) * MAX_X);
+	TXT_BUF = malloc(MAX_X);
 
 	// Endless loop until the user quits the game
 	while(TRUE) {
