@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -lncurses -Os -funroll-loops -fPIE -fshort-enums -g -Wall
+CFLAGS = -lncurses -Os -funroll-loops -fPIE -fshort-enums -Wall
 TARGET = csnake
 bindir = /usr/local/bin
 
@@ -10,7 +10,7 @@ install: all
 	mv $(TARGET) $(DESTDIR)$(bindir)/$(TARGET)
 
 uninstall:
-	rm $(DESTDIR)$(bindir)/$(TARGET)
+	rm -f $(DESTDIR)$(bindir)/$(TARGET)
 
 clean:
-	rm $(TARGET)
+	rm -f $(TARGET)

@@ -51,3 +51,9 @@ To uninstall it again:
 ```
 make uninstall
 ```
+
+By default the binary will be called *csnake*. If you want to change that you can use:
+```
+make TARGET=<New Name> install
+```
+Be sure to use the same target name for the uninstall.
