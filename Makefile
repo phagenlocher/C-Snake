@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -lncurses -Os -funroll-loops -fPIE -fshort-enums -Wall
+CFLAGS = -lncurses -Os -funroll-loops -fPIE -fshort-enums -g -Wall
 TARGET = csnake
 bindir = /usr/local/bin
 
