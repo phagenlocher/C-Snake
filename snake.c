@@ -21,7 +21,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "a0.36"
+#define VERSION "0.37 (Beta)"
 #define FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -64,7 +64,6 @@ static const char *LOGO[] = {
 	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"
 };
 
-
 void init_save_file_path() {
 	// Allocate space for the home path, the filename, 1 '/' and the zero byte.
 	FILE_PATH = malloc((strlen(getenv("HOME")) + strlen(FILE_NAME) + 2));
@@ -105,9 +104,6 @@ void clean_exit() {
 	// Free buffers
 	free(TXT_BUF);
 	free(FILE_PATH);
-	// Delete windows
-	delwin(GAME_WIN);
-	delwin(STATUS_WIN);
 	endwin();
 	exit(0);
 }
@@ -322,7 +318,11 @@ void play_round() {
 			default:
 				// Random wall creation
 				constant = rand() % (MAX_Y / 2 - 1);
-				smaller = (rand() % (MAX_X - 4)) / 2;
+				do {
+					// Since (smaller - 1) is used for modulo division
+					// it has to be bigger than 1
+					smaller = (rand() % (MAX_X - 4)) / 2;
+				} while(smaller <= 1);
 				bigger = MAX_X - smaller;
 				wall = create_wall(smaller, bigger, constant, RIGHT, NULL);
 				wall = create_wall(smaller, bigger, MAX_Y - constant - 1, RIGHT, wall);
@@ -531,6 +531,10 @@ void play_round() {
 	// Delete the screen content
 	clear();
 
+	// Delete windows
+	delwin(GAME_WIN);
+	delwin(STATUS_WIN);
+
 	// If we are repeating we are jumping to the start of the function
 	if(repeat) {
 		goto round_start;
@@ -596,8 +600,9 @@ void show_startscreen() {
 				clrtoeol();
 			}
 			print_centered(stdscr, anchor + 7, "--- Programming by Philipp Hagenlocher ---");
-			print_centered(stdscr, anchor + 8, "--- Start with -v to get information on the license ---");
-			print_centered(stdscr, anchor + 9, "--- Press any key! ---");
+			print_centered(stdscr, anchor + 8, "--- Please report any bugs you can find on GitHub ---");
+			print_centered(stdscr, anchor + 9, "--- Start with -v to get information on the license ---");
+			print_centered(stdscr, anchor + 10, "--- Press any key! ---");
 			refresh();
 			getch();
 			break;
@@ -652,7 +657,7 @@ void parse_arguments(int argc, char **argv) {
 				printf(" -v\tDisplay version and license information\n");
 				exit(0);
 			case 'v':
-				printf("C-Snake %s\nCopyright (c) 2015 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text or visit https://opensource.org/licenses/MIT\nThere is no warranty.\n", VERSION);
+				printf("C-Snake %s\nCopyright (c) 2015 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text\nThere is no warranty.\n", VERSION);
 				exit(0);
 		}
 	}
