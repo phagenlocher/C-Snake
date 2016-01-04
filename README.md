@@ -1,5 +1,7 @@
 # C-Snake
 
+![Status](http://home.in.tum.de/~hagenloc/CSNAKE/Status-Beta-green.svg)
+
 The classic game: **Snake**
 
 Written with ncurses, it uses the terminal to display its gameplay.
@@ -31,7 +33,7 @@ Arguments:
 * make
 * libncurses5
 
-On Ubuntu or Debian you can use this install the dependencies:
+On Ubuntu or Debian you can use this to install the dependencies:
 ```
 apt-get install gcc make libncurses5-dev
 ```
