@@ -59,3 +59,14 @@ By default the binary will be called *csnake*. If you want to change that you ca
 make TARGET=<New Name> install
 ```
 Be sure to use the same target name for the uninstall.
+
+## Screenshots
+
+### XTerm
+![Screenshot 1](http://home.in.tum.de/~hagenloc/CSNAKE/screen1.png)
+### Terminator
+![Screenshot 2](http://home.in.tum.de/~hagenloc/CSNAKE/screen2.png)
+### Debian TTY in Virtualbox
+![Screenshot 3](http://home.in.tum.de/~hagenloc/CSNAKE/screen3.png)
+### cool-retro-term
+![Screenshot 4](http://home.in.tum.de/~hagenloc/CSNAKE/screen4.png)
