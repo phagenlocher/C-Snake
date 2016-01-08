@@ -21,7 +21,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.37 (Beta)"
+#define VERSION "0.37_1 (Beta)"
 #define FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -651,13 +651,13 @@ void parse_arguments(int argc, char **argv) {
 				printf(" -w <0-5>\n\tPlay with walls! The number specifies the predefined pattern. (0 is random!)\n");
 				printf(" -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
 				printf(" -s\tSkip the titlescreen\n");
-				printf(" -r\tRemoves the savefile\n");
+				printf(" -r\tRemove the savefile\n");
 				printf(" -i\tIgnore savefile (don't read nor write)\n");
 				printf(" -h\tDisplay this information\n");
 				printf(" -v\tDisplay version and license information\n");
 				exit(0);
 			case 'v':
-				printf("C-Snake %s\nCopyright (c) 2015 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text\nThere is no warranty.\n", VERSION);
+				printf("C-Snake %s\nCopyright (c) 2015 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
 				exit(0);
 		}
 	}
