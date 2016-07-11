@@ -21,7 +21,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.37_1 (Beta)"
+#define VERSION "0.38 (Beta)"
 #define FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -42,22 +42,22 @@ static char *TXT_BUF; // Buffer used for format strings
 static char *FILE_PATH;
 static unsigned int MAX_X;
 static unsigned int MAX_Y;
-static unsigned int SPEED;
+static uint8_t SPEED;
 static long long POINTS;
 static long long HIGHSCORE;
 static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
-static int OPEN_BOUNDS = FALSE;
-static int SKIP_TITLE = FALSE;
-static int IGNORE_FILES = FALSE;
-static int WALLS_ACTIVE = FALSE;
-static int WALL_PATTERN;
-static int SNAKE_COLOR = 2;
+static uint8_t OPEN_BOUNDS = FALSE;
+static uint8_t SKIP_TITLE = FALSE;
+static uint8_t IGNORE_FILES = FALSE;
+static uint8_t WALLS_ACTIVE = FALSE;
+static uint8_t WALL_PATTERN;
+static uint8_t SNAKE_COLOR = 2;
 // Logo generated on http://www.network-science.de/ascii/
 // Used font: nancyj
 static const char *LOGO[] = {
 	" a88888b.          .d88888b                    dP               ",
-	"d8'   `88          88.    ''                   88               ", 
+	"d8'   `88          88.    ''                   88               ",
 	"88                 `Y88888b. 88d888b. .d8888b. 88  .dP  .d8888b.",
 	"88        88888888       `8b 88'  `88 88'  `88 88888'   88ooood8",
 	"Y8.   .88          d8'   .8P 88    88 88.  .88 88  `8b. 88.  ...",
@@ -326,7 +326,7 @@ void play_round() {
 				bigger = MAX_X - smaller;
 				wall = create_wall(smaller, bigger, constant, RIGHT, NULL);
 				wall = create_wall(smaller, bigger, MAX_Y - constant - 1, RIGHT, wall);
-		
+
 				constant = rand() % (smaller - 1);
 				smaller = (rand() % MAX_Y) / 2;
 				bigger = MAX_Y - smaller + 1;
@@ -464,7 +464,7 @@ void play_round() {
 		if(is_on_obstacle(wall, x, y)) {
 			break;
 		}
-		
+
 		// Head hits the food
 		if((x == food_x) && (y == food_y)) {
 			// Let the snake grow and change the speed
@@ -640,7 +640,7 @@ void parse_arguments(int argc, char **argv) {
 				if((color >= 1) && (color <= 5)) {
 					SNAKE_COLOR = color;
 					break;
-				}
+				} // else pass to help information
 			case '?': // Invalid parameter
 				// pass to help information
 			case 'h':
@@ -651,10 +651,15 @@ void parse_arguments(int argc, char **argv) {
 				printf(" -w <0-5>\n\tPlay with walls! The number specifies the predefined pattern. (0 is random!)\n");
 				printf(" -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
 				printf(" -s\tSkip the titlescreen\n");
-				printf(" -r\tRemove the savefile\n");
+				printf(" -r\tRemove the savefile and quit\n");
 				printf(" -i\tIgnore savefile (don't read nor write)\n");
 				printf(" -h\tDisplay this information\n");
-				printf(" -v\tDisplay version and license information\n");
+				printf(" -v\tDisplay version and license information\n\n");
+				printf("Ingame Controls:\n");
+				printf(" Arrow-Keys\tDirection to go\n");
+				printf(" Enter\t\tPause\n");
+				printf(" Shift+Q\tEnd Round\n");
+				printf(" Shift+R\tRestart Round (can be used to resize the game after windowsize has changed)\n");
 				exit(0);
 			case 'v':
 				printf("C-Snake %s\nCopyright (c) 2015 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
