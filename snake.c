@@ -21,7 +21,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.38 (Beta)"
+#define VERSION "0.39 (Beta)"
 #define FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -679,11 +679,15 @@ int main(int argc, char **argv) {
 	// Init colors and ncurses specific functions
 	initscr();
 	start_color();
-	init_pair(1, COLOR_WHITE, COLOR_BLACK);
-	init_pair(2, COLOR_GREEN, COLOR_BLACK);
-	init_pair(3, COLOR_RED, COLOR_BLACK);
-	init_pair(4, COLOR_YELLOW, COLOR_BLACK);
-	init_pair(5, COLOR_BLUE, COLOR_BLACK);
+	short background = COLOR_BLACK;
+	if(use_default_colors() != ERR) {
+		background = -1;
+	}
+	init_pair(1, COLOR_WHITE,  background);
+	init_pair(2, COLOR_GREEN,  background);
+	init_pair(3, COLOR_RED,    background);
+	init_pair(4, COLOR_YELLOW, background);
+	init_pair(5, COLOR_BLUE,   background);
   	bkgd(COLOR_PAIR(1));
   	curs_set(FALSE);
 	noecho();
