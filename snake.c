@@ -240,8 +240,9 @@ void free_linked_list(LinkedCell *cell) {
 
 void play_round() {
 	round_start:
-  	// Init windows and max coordinates
+  	// Init max coordinates
 	getmaxyx(stdscr, MAX_Y, MAX_X);
+	// Create subwindows and their coordinates
 	GAME_WIN = subwin(stdscr, MAX_Y - 4, MAX_X, 0, 0);
 	STATUS_WIN = subwin(stdscr, 4, MAX_X, MAX_Y - 4, 0);
 	wattrset(STATUS_WIN, A_NORMAL);
@@ -703,10 +704,9 @@ int main(int argc, char **argv) {
 	if((MAX_X < 64) || (MAX_Y < 18)) {
 		SKIP_TITLE = TRUE;
 	}
-	// Allocating memory for buffer so that the text can be big enough to fill
-	// a whole row. Since it is always used to display centered text it doesn't
-	// have to be bigger.
-	TXT_BUF = malloc(MAX_X);
+	// 19 chars are used for the max num for a long long. Longest additional
+	// string ("--- Last Score: %lld ---") has 20 chars.
+	TXT_BUF = malloc(40);
 
 	// Endless loop until the user quits the game
 	while(TRUE) {
