@@ -1,4 +1,5 @@
 #include <ncurses.h>
+#include <linux/limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -21,8 +22,8 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.39 (Beta)"
-#define FILE_NAME ".csnake"
+#define VERSION "0.40 (Beta)"
+#define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
 typedef enum Direction Direction;
@@ -39,7 +40,8 @@ struct LinkedCell {
 
 // Globals
 static char *TXT_BUF; // Buffer used for format strings
-static char *FILE_PATH;
+static char *FILE_PATH = NULL;
+static char *FILE_NAME = NULL;
 static unsigned int MAX_X;
 static unsigned int MAX_Y;
 static uint8_t SPEED;
@@ -47,6 +49,7 @@ static long long POINTS;
 static long long HIGHSCORE;
 static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
+static uint8_t REMOVE_SAFEFILE = FALSE;
 static uint8_t OPEN_BOUNDS = FALSE;
 static uint8_t SKIP_TITLE = FALSE;
 static uint8_t IGNORE_FILES = FALSE;
@@ -64,12 +67,17 @@ static const char *LOGO[] = {
 	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"
 };
 
-void init_save_file_path() {
-	// Allocate space for the home path, the filename, 1 '/' and the zero byte.
-	FILE_PATH = malloc((strlen(getenv("HOME")) + strlen(FILE_NAME) + 2));
-	strcat(FILE_PATH, getenv("HOME"));
-	strcat(FILE_PATH, "/");
-	strcat(FILE_PATH, FILE_NAME);
+void init_safe_file_path() {
+	if(FILE_NAME == NULL) {
+		// Allocate space for the home path, the filename, 1 '/' and the zero byte.
+		FILE_PATH = malloc((strlen(getenv("HOME")) + strlen(STD_FILE_NAME) + 2));
+		strcat(FILE_PATH, getenv("HOME"));
+		strcat(FILE_PATH, "/");
+		strcat(FILE_PATH, STD_FILE_NAME);
+	} else {
+		FILE_PATH = malloc(PATH_MAX + 1);
+		realpath(FILE_NAME, FILE_PATH);
+	}
 }
 
 void write_score_file() {
@@ -78,9 +86,9 @@ void write_score_file() {
 	}
 	char score_str[FILE_LENGTH];
 	sprintf(score_str, "%lld", HIGHSCORE);
-	FILE *save_file = fopen(FILE_PATH, "w");
-	fputs(score_str, save_file);
-	fclose(save_file);
+	FILE *safe_file = fopen(FILE_PATH, "w");
+	fputs(score_str, safe_file);
+	fclose(safe_file);
 }
 
 void read_score_file() {
@@ -88,14 +96,14 @@ void read_score_file() {
 		return;
 	}
 	char content[FILE_LENGTH];
-	FILE *save_file = fopen(FILE_PATH, "r");
-	if(save_file == NULL) {
+	FILE *safe_file = fopen(FILE_PATH, "r");
+	if(safe_file == NULL) {
 		HIGHSCORE = 0;
 		return;
 	}
-	fgets(content, FILE_LENGTH, save_file);
+	fgets(content, FILE_LENGTH, safe_file);
 	HIGHSCORE = atoll(content);
-	fclose(save_file);
+	fclose(safe_file);
 }
 
 void clean_exit() {
@@ -577,6 +585,11 @@ void show_startscreen() {
 	}
 	if(IGNORE_FILES) {
 		print_centered(stdscr, anchor + 12, "--- Savefile is ignored! ---");
+	} else {
+		if(FILE_NAME != NULL) {
+			print_centered(stdscr, anchor + 12, "Used savefile:");
+			print_centered(stdscr, anchor + 13, FILE_PATH);
+		}
 	}
 
 	// Printing verion
@@ -614,7 +627,7 @@ void show_startscreen() {
 
 void parse_arguments(int argc, char **argv) {
 	int arg, color, pattern;
-	while((arg = getopt(argc, argv, "osirw:c:hv")) != -1) {
+	while((arg = getopt(argc, argv, "osif:rw:c:hv")) != -1) {
 		switch (arg) {
 			case 'o':
 				OPEN_BOUNDS = TRUE;
@@ -625,10 +638,12 @@ void parse_arguments(int argc, char **argv) {
 			case 'i':
 				IGNORE_FILES = TRUE;
 				break;
+			case 'f':
+				FILE_NAME = optarg;
+				break;
 			case 'r':
-				remove(FILE_PATH);
-				free(FILE_PATH);
-				exit(0);
+				REMOVE_SAFEFILE = TRUE;
+				break;
 			case 'w':
 				pattern = atoi(optarg);
 				if((pattern >= 0) && (pattern <= 5)) {
@@ -653,8 +668,9 @@ void parse_arguments(int argc, char **argv) {
 				printf(" -w <0-5>\n\tPlay with walls! The number specifies the predefined pattern. (0 is random!)\n");
 				printf(" -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
 				printf(" -s\tSkip the titlescreen\n");
-				printf(" -r\tRemove the savefile and quit\n");
-				printf(" -i\tIgnore savefile (don't read nor write)\n");
+				printf(" -r\tRemove the safefile and quit\n");
+				printf(" -i\tIgnore safefile (don't read nor write)\n");
+				printf(" -f path\n\tSpecify alternate safefile\n");
 				printf(" -h\tDisplay this information\n");
 				printf(" -v\tDisplay version and license information\n\n");
 				printf("Ingame Controls:\n");
@@ -664,18 +680,26 @@ void parse_arguments(int argc, char **argv) {
 				printf(" Shift+R\tRestart Round (can be used to resize the game after windowsize has changed)\n");
 				exit(0);
 			case 'v':
-				printf("C-Snake %s\nCopyright (c) 2015 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
+				printf("C-Snake %s\nCopyright (c) 2015-2018 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
 				exit(0);
 		}
 	}
 }
 
 int main(int argc, char **argv) {
-	init_save_file_path();
 	// Parse arguments
 	parse_arguments(argc, argv);
 	// Seed RNG with current time
 	srand(time(NULL));
+	// Init path for safefile
+	init_safe_file_path();
+	if(FILE_PATH == 0) {
+		IGNORE_FILES = TRUE;
+	} else if(REMOVE_SAFEFILE) {
+		remove(FILE_PATH);
+		free(FILE_PATH);
+		exit(0);
+	}
 	// Read local highscore
 	read_score_file();
 	// Init colors and ncurses specific functions
@@ -700,9 +724,9 @@ int main(int argc, char **argv) {
 	getmaxyx(stdscr, MAX_Y, MAX_X);
 	// If the screen width is smaller than 64, the logo cannot be displayed
 	// and the titlescreen will most likely not work, so it is skipped.
-	// If the height is smaller than 18, the version cannot be displayed
+	// If the height is smaller than 19, the version cannot be displayed
 	// correctly so we have to skip the title.
-	if((MAX_X < 64) || (MAX_Y < 18)) {
+	if((MAX_X < 64) || (MAX_Y < 19)) {
 		SKIP_TITLE = TRUE;
 	}
 	// 19 chars are used for the max num for a long long. Longest additional
