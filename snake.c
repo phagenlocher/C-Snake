@@ -31,8 +31,8 @@ typedef struct LinkedCell LinkedCell;
 enum Direction {HOLD, UP, DOWN, RIGHT, LEFT};
 
 struct LinkedCell {
-	int x;
-	int y;
+	unsigned int x;
+	unsigned int y;
 	LinkedCell *last;
 	LinkedCell *next;
 };
@@ -138,7 +138,7 @@ void pause_game(const char string[], const int seconds) {
 	wrefresh(STATUS_WIN);
 }
 
-int is_on_obstacle(LinkedCell *test_cell, const int x, const int y){
+int is_on_obstacle(LinkedCell *test_cell, const unsigned int x, const unsigned int y){
 	if(test_cell == NULL) {
 		return FALSE;
 	}
@@ -152,14 +152,14 @@ int is_on_obstacle(LinkedCell *test_cell, const int x, const int y){
 	return FALSE;
 }
 
-void new_random_coordinates(LinkedCell *snake, LinkedCell *wall, int *x, int *y) {
+void new_random_coordinates(LinkedCell *snake, LinkedCell *wall, unsigned int *x, unsigned int *y) {
 	do {
 		*x = rand() % MAX_X;
 		*y = rand() % MAX_Y;
 	} while(is_on_obstacle(snake, *x, *y) || is_on_obstacle(wall, *x, *y));
 }
 
-LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedCell *last_cell) {
+LinkedCell *create_wall(unsigned int start, unsigned int end, unsigned int constant, Direction dir, LinkedCell *last_cell) {
 	int i;
 	LinkedCell *new_wall, *wall = malloc(sizeof(LinkedCell));
 
@@ -254,7 +254,8 @@ void play_round() {
 	timeout(SPEED); // The timeout for getch() makes up the game speed
 
 	// Init variables
-	int key, x, y, growing, food_x, food_y, points_counter, lost, repeat, length;
+	int key, points_counter, lost, repeat, length;
+	unsigned int x, y, growing, food_x, food_y;
 	Direction direction, old_direction;
 	x = MAX_X / 2;
 	y = MAX_Y / 2;
