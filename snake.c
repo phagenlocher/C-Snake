@@ -22,7 +22,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.40 (Beta)"
+#define VERSION "0.41 (Beta)"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -32,8 +32,8 @@ typedef struct LinkedCell LinkedCell;
 enum Direction {HOLD, UP, DOWN, RIGHT, LEFT};
 
 struct LinkedCell {
-	unsigned int x;
-	unsigned int y;
+	int x;
+	int y;
 	LinkedCell *last;
 	LinkedCell *next;
 };
@@ -146,7 +146,7 @@ void pause_game(const char string[], const int seconds) {
 	wrefresh(STATUS_WIN);
 }
 
-int is_on_obstacle(LinkedCell *test_cell, const unsigned int x, const unsigned int y){
+int is_on_obstacle(LinkedCell *test_cell, const int x, const int y){
 	if(test_cell == NULL) {
 		return FALSE;
 	}
@@ -160,14 +160,14 @@ int is_on_obstacle(LinkedCell *test_cell, const unsigned int x, const unsigned i
 	return FALSE;
 }
 
-void new_random_coordinates(LinkedCell *snake, LinkedCell *wall, unsigned int *x, unsigned int *y) {
+void new_random_coordinates(LinkedCell *snake, LinkedCell *wall, int *x, int *y) {
 	do {
 		*x = rand() % MAX_X;
 		*y = rand() % MAX_Y;
 	} while(is_on_obstacle(snake, *x, *y) || is_on_obstacle(wall, *x, *y));
 }
 
-LinkedCell *create_wall(unsigned int start, unsigned int end, unsigned int constant, Direction dir, LinkedCell *last_cell) {
+LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedCell *last_cell) {
 	int i;
 	LinkedCell *new_wall, *wall = malloc(sizeof(LinkedCell));
 
@@ -262,8 +262,7 @@ void play_round() {
 	timeout(SPEED); // The timeout for getch() makes up the game speed
 
 	// Init variables
-	int key, points_counter, lost, repeat, length;
-	unsigned int x, y, growing, food_x, food_y;
+	int x, y, key, points_counter, lost, repeat, length, growing, food_x, food_y;
 	Direction direction, old_direction;
 	x = MAX_X / 2;
 	y = MAX_Y / 2;
@@ -693,7 +692,7 @@ int main(int argc, char **argv) {
 	srand(time(NULL));
 	// Init path for safefile
 	init_safe_file_path();
-	if(FILE_PATH == 0) {
+	if(FILE_PATH == NULL) {
 		IGNORE_FILES = TRUE;
 	} else if(REMOVE_SAFEFILE) {
 		remove(FILE_PATH);
