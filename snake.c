@@ -22,7 +22,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.41 (Beta)"
+#define VERSION "0.42 (Beta)"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -76,7 +76,10 @@ void init_safe_file_path() {
 		strcat(FILE_PATH, STD_FILE_NAME);
 	} else {
 		FILE_PATH = malloc(PATH_MAX + 1);
-		realpath(FILE_NAME, FILE_PATH);
+		if(realpath(FILE_NAME, FILE_PATH) == NULL) {
+			free(FILE_PATH);
+			FILE_PATH = NULL;
+		}
 	}
 }
 
@@ -101,8 +104,11 @@ void read_score_file() {
 		HIGHSCORE = 0;
 		return;
 	}
-	fgets(content, FILE_LENGTH, safe_file);
-	HIGHSCORE = atoll(content);
+	if(fgets(content, FILE_LENGTH, safe_file) == NULL) {
+		HIGHSCORE = 0;
+	} else {
+		HIGHSCORE = atoll(content);
+	}
 	fclose(safe_file);
 }
 
@@ -355,7 +361,7 @@ void play_round() {
 		wattrset(GAME_WIN, COLOR_PAIR(3) | A_BOLD);
 		mvwaddch(GAME_WIN, food_y, food_x, '0');
 		wattrset(GAME_WIN, COLOR_PAIR(SNAKE_COLOR) | A_BOLD);
-		mvwaddch(GAME_WIN,y,x,'X');
+		mvwaddch(GAME_WIN, y, x, 'X');
 
 		// Getting input
 		get_input: key = getch();
@@ -437,11 +443,11 @@ void play_round() {
 		if(OPEN_BOUNDS) {
 			// If you hit the outer bounds you'll end up on the other side
 			if(y < 0) {
-				y = MAX_Y;
+				y = MAX_Y-1;
 			}else if(y >= MAX_Y) {
 				y = 0;
 			}else if(x < 0) {
-				x = MAX_X;
+				x = MAX_X-1;
 			}else if(x >= MAX_X){
 				x = 0;
 			}
@@ -679,7 +685,7 @@ void parse_arguments(int argc, char **argv) {
 				printf(" Shift+R\tRestart Round (can be used to resize the game after windowsize has changed)\n");
 				exit(0);
 			case 'v':
-				printf("C-Snake %s\nCopyright (c) 2015-2018 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
+				printf("C-Snake %s\nCopyright (c) 2015-2019 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
 				exit(0);
 		}
 	}
