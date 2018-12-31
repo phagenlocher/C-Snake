@@ -18,11 +18,12 @@
 #define STARTING_SPEED 150
 #define STARTING_LENGTH 5
 #define POINTS_COUNTER_VALUE 1000
+#define SUPERFOOD_COUNTER_VALUE 10
 #define MIN_POINTS 100
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.42 (Beta)"
+#define VERSION "0.50 (Beta)"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -268,7 +269,8 @@ void play_round() {
 	timeout(SPEED); // The timeout for getch() makes up the game speed
 
 	// Init variables
-	int x, y, key, points_counter, lost, repeat, length, growing, food_x, food_y;
+	int x, y, key, points_counter, lost, repeat, length, growing;
+	int superfood_counter, food_x, food_y;
 	Direction direction, old_direction;
 	x = MAX_X / 2;
 	y = MAX_Y / 2;
@@ -278,6 +280,7 @@ void play_round() {
 	lost = TRUE;
 	repeat = FALSE;
 	length = 1;
+	superfood_counter = SUPERFOOD_COUNTER_VALUE;
 	direction = old_direction = HOLD;
 
 	// Print points after they have been set to 0
@@ -358,7 +361,7 @@ void play_round() {
 	while(TRUE) {
 
 		// Painting the food and the snakes head
-		wattrset(GAME_WIN, COLOR_PAIR(3) | A_BOLD);
+		wattrset(GAME_WIN, COLOR_PAIR((superfood_counter == 0) ? 4 : 3) | A_BOLD);
 		mvwaddch(GAME_WIN, food_y, food_x, '0');
 		wattrset(GAME_WIN, COLOR_PAIR(SNAKE_COLOR) | A_BOLD);
 		mvwaddch(GAME_WIN, y, x, 'X');
@@ -487,10 +490,11 @@ void play_round() {
 			if(SPEED > MIN_SPEED) {
 				SPEED -= SPEED_FACTOR;
 			}
-			POINTS += points_counter + length + (STARTING_SPEED - SPEED);
+			POINTS += (points_counter + length + (STARTING_SPEED - SPEED)) * (superfood_counter == 0 ? 5 : 1);
 			points_counter = POINTS_COUNTER_VALUE;
 			timeout(SPEED);
 			print_points();
+			superfood_counter = (superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : superfood_counter-1;
 			new_random_coordinates(head, wall, &food_x, &food_y);
 		}
 
