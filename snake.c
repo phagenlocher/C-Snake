@@ -24,7 +24,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.52 (Beta)"
+#define VERSION "0.53 (Beta)"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -57,6 +57,7 @@ static int open_bounds_flag = FALSE;
 static int skip_flag = FALSE;
 static int wall_flag = FALSE;
 static int wall_pattern;
+static int vim_flag = FALSE;
 static int snake_color = 2;
 // Logo generated on http://www.network-science.de/ascii/
 // Used font: nancyj
@@ -268,25 +269,39 @@ void play_round() {
 	status_win = subwin(stdscr, 4, max_x, max_y - 4, 0);
 	wattrset(status_win, A_NORMAL);
 	box(status_win, 0, 0);
+	// Init max coordinates in relation to game window
 	getmaxyx(game_win, max_y, max_x);
 
-	// Set game specific timeout
+	// Set globals
+	points = 0;
 	speed = STARTING_SPEED;
 	timeout(speed); // The timeout for getch() makes up the game speed
 
-	// Init variables
-	int x, y, key, points_counter, lost, repeat, length, growing;
-	int superfood_counter, food_x, food_y;
-	Direction direction, old_direction;
+	// Init key variables
+	int key, up_key, down_key, left_key, right_key;
+	key = 0;
+	up_key = vim_flag ? 'k' : KEY_UP;
+	down_key = vim_flag ? 'j' : KEY_DOWN;
+	left_key = vim_flag ? 'h' : KEY_LEFT;
+	right_key = vim_flag ? 'l' : KEY_RIGHT;
+
+	// Init gameplay variables
+	int x, y, points_counter, lost, repeat, length, growing;
 	x = max_x / 2;
 	y = max_y / 2;
-	points = key = 0;
 	points_counter = POINTS_COUNTER_VALUE;
-	growing = STARTING_LENGTH - 1;
 	lost = TRUE;
 	repeat = FALSE;
 	length = 1;
+	growing = STARTING_LENGTH - 1;
+
+	// Init food variables
+	int superfood_counter, food_x, food_y;
 	superfood_counter = SUPERFOOD_COUNTER_VALUE;
+	food_x = food_y = 0;
+
+	// Init direction variables
+	Direction direction, old_direction;
 	direction = old_direction = HOLD;
 
 	// Print points after they have been set to 0
@@ -376,16 +391,16 @@ void play_round() {
 		get_input: key = getch();
 
 		// Changing direction according to the input
-		if(key == KEY_LEFT) {
+		if(key == left_key) {
 			if(direction != RIGHT)
 				direction = LEFT;
-		}else if(key == KEY_RIGHT) {
+		}else if(key == right_key) {
 			if(direction != LEFT)
 				direction = RIGHT;
-		}else if(key == KEY_UP) {
+		}else if(key == up_key) {
 			if(direction != DOWN)
 				direction = UP;
-		}else if(key == KEY_DOWN) {
+		}else if(key == down_key) {
 			if(direction != UP)
 				direction = DOWN;
 		}else if((key == '\n') && (direction != HOLD)) { // Enter-key
@@ -651,6 +666,7 @@ void parse_arguments(int argc, char **argv) {
 		{"ignore-savefile", no_argument, NULL, 'i'},
 		{"open-bound", no_argument, NULL, 'o'},
 		{"skip-title", no_argument, NULL, 's'},
+		{"vim", no_argument, &vim_flag, TRUE},
 		{"color", required_argument, NULL, 'c'},
 		{"walls", required_argument, NULL, 'w'},
 		{"filepath", required_argument, NULL, 'f'},
@@ -697,10 +713,11 @@ void parse_arguments(int argc, char **argv) {
 				printf(" --open-bounds, -o\n\tOuter bounds will let the snake pass through\n");
 				printf(" --walls <0-5>, -w <0-5>\n\tEnable a predefined wall pattern (0 is random!)\n");
 				printf(" --color <1-5>, -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
-				printf(" --skip-title, -s\n\tSkip the titlescreen\n");
+				printf(" --skip-title, -s\n\tSkip the title screen\n");
 				printf(" --remove-savefile, -r\n\tRemove the savefile and quit\n");
 				printf(" --ignore-savefile, -i\n\tIgnore savefile (don't read nor write)\n");
 				printf(" --filepath path, -f path\n\tSpecify alternate path savefile\n");
+				printf(" --vim\n\tUse vim-style direction controls (H,J,K,L)\n");
 				printf(" --help, -h\n\tDisplay this information\n");
 				printf(" --version, -v\n\tDisplay version and license information\n\n");
 				printf("Ingame Controls:\n");
