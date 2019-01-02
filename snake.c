@@ -23,7 +23,7 @@
 #define MIN_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.50 (Beta)"
+#define VERSION "0.51 (Beta)"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -42,7 +42,6 @@ struct LinkedCell {
 // Globals
 static char *TXT_BUF; // Buffer used for format strings
 static char *FILE_PATH = NULL;
-static char *FILE_NAME = NULL;
 static unsigned int MAX_X;
 static unsigned int MAX_Y;
 static uint8_t SPEED;
@@ -50,10 +49,11 @@ static long long POINTS;
 static long long HIGHSCORE;
 static WINDOW *GAME_WIN;
 static WINDOW *STATUS_WIN;
-static uint8_t REMOVE_SAFEFILE = FALSE;
+static uint8_t REMOVE_FILE = FALSE;
+static uint8_t IGNORE_FILE = FALSE;
+static uint8_t CUSTOM_FILE = FALSE;
 static uint8_t OPEN_BOUNDS = FALSE;
 static uint8_t SKIP_TITLE = FALSE;
-static uint8_t IGNORE_FILES = FALSE;
 static uint8_t WALLS_ACTIVE = FALSE;
 static uint8_t WALL_PATTERN;
 static uint8_t SNAKE_COLOR = 2;
@@ -68,63 +68,68 @@ static const char *LOGO[] = {
 	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"
 };
 
-void init_safe_file_path() {
-	if(FILE_NAME == NULL) {
-		// Allocate space for the home path, the filename, 1 '/' and the zero byte.
-		FILE_PATH = malloc((strlen(getenv("HOME")) + strlen(STD_FILE_NAME) + 2));
-		strcat(FILE_PATH, getenv("HOME"));
-		strcat(FILE_PATH, "/");
-		strcat(FILE_PATH, STD_FILE_NAME);
-	} else {
-		FILE_PATH = malloc(PATH_MAX + 1);
-		if(realpath(FILE_NAME, FILE_PATH) == NULL) {
-			free(FILE_PATH);
-			FILE_PATH = NULL;
-		}
+void init_file_path() {
+	if(FILE_PATH != NULL) {
+		return;
+	}
+	// Get "HOME" environment variable
+	char *home_dir = getenv("HOME");
+	if(home_dir == NULL) {
+		IGNORE_FILE = TRUE;
+		FILE_PATH = NULL;
+		return;
+	}
+	// Allocate space for the home path, the filename, '/' and the zero byte
+	FILE_PATH = malloc(strlen(home_dir) + strlen(STD_FILE_NAME) + 2);
+	if(sprintf(FILE_PATH, "%s/%s", home_dir, STD_FILE_NAME) < 1) {
+		free(FILE_PATH);
+		FILE_PATH = NULL;
 	}
 }
 
 void write_score_file() {
-	if(IGNORE_FILES) {
+	if(IGNORE_FILE) {
 		return;
 	}
 	char score_str[FILE_LENGTH];
-	sprintf(score_str, "%lld", HIGHSCORE);
-	FILE *safe_file = fopen(FILE_PATH, "w");
-	fputs(score_str, safe_file);
-	fclose(safe_file);
+	sprintf(score_str, "%.*lld", FILE_LENGTH-1, HIGHSCORE);
+	FILE *file = fopen(FILE_PATH, "w");
+	if(file == NULL) {
+		return;
+	}
+	fputs(score_str, file);
+	fclose(file);
 }
 
 void read_score_file() {
-	if(IGNORE_FILES) {
+	if(IGNORE_FILE) {
 		return;
 	}
 	char content[FILE_LENGTH];
-	FILE *safe_file = fopen(FILE_PATH, "r");
-	if(safe_file == NULL) {
+	FILE *file = fopen(FILE_PATH, "r");
+	if(file == NULL) {
 		HIGHSCORE = 0;
 		return;
 	}
-	if(fgets(content, FILE_LENGTH, safe_file) == NULL) {
+	if(fgets(content, FILE_LENGTH, file) == NULL) {
 		HIGHSCORE = 0;
 	} else {
 		HIGHSCORE = atoll(content);
 	}
-	fclose(safe_file);
+	fclose(file);
 }
 
 void clean_exit() {
-	// Write highscore to local file
+	// Write highscore to file
 	write_score_file();
-	// Free buffers
-	free(TXT_BUF);
-	free(FILE_PATH);
+	// End ncurses
 	endwin();
+	// The OS handles the rest
 	exit(0);
 }
 
 void print_points() {
-	wattrset(STATUS_WIN, A_UNDERLINE  | A_BOLD);
+	wattrset(STATUS_WIN, A_UNDERLINE | A_BOLD);
 	sprintf(TXT_BUF, "Score: %lld", POINTS);
 	print_centered(STATUS_WIN, 1, TXT_BUF);
 	wrefresh(STATUS_WIN);
@@ -592,10 +597,10 @@ void show_startscreen() {
 	if(WALLS_ACTIVE) {
 		print_centered(stdscr, anchor + 11, "--- Walls are activated! ---");
 	}
-	if(IGNORE_FILES) {
+	if(IGNORE_FILE) {
 		print_centered(stdscr, anchor + 12, "--- Savefile is ignored! ---");
 	} else {
-		if(FILE_NAME != NULL) {
+		if(CUSTOM_FILE && FILE_PATH != NULL) {
 			print_centered(stdscr, anchor + 12, "Used savefile:");
 			print_centered(stdscr, anchor + 13, FILE_PATH);
 		}
@@ -645,13 +650,14 @@ void parse_arguments(int argc, char **argv) {
 				SKIP_TITLE = TRUE;
 				break;
 			case 'i':
-				IGNORE_FILES = TRUE;
+				IGNORE_FILE = TRUE;
 				break;
 			case 'f':
-				FILE_NAME = optarg;
+				FILE_PATH = optarg;
+				CUSTOM_FILE = TRUE;
 				break;
 			case 'r':
-				REMOVE_SAFEFILE = TRUE;
+				REMOVE_FILE = TRUE;
 				break;
 			case 'w':
 				pattern = atoi(optarg);
@@ -701,12 +707,11 @@ int main(int argc, char **argv) {
 	// Seed RNG with current time
 	srand(time(NULL));
 	// Init path for safefile
-	init_safe_file_path();
+	init_file_path();
 	if(FILE_PATH == NULL) {
-		IGNORE_FILES = TRUE;
-	} else if(REMOVE_SAFEFILE) {
+		IGNORE_FILE = TRUE;
+	} else if(REMOVE_FILE) {
 		remove(FILE_PATH);
-		free(FILE_PATH);
 		exit(0);
 	}
 	// Read local highscore
