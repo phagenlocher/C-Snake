@@ -26,6 +26,7 @@ Arguments:
 * **--remove-savefile, -r** removes the savefile
 * **--ignore-savefile, -i** will ignore the savefile
 * **--filepath path, -f path** will use *path* as the savefile
+* **--vim** changes controls with arrow keys to H, J, K and L
 * **--help, -h** displays help information
 * **--version, -v** displays information about the version and license
 
