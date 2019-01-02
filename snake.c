@@ -14,17 +14,19 @@
 // Direction macros
 #define is_horizontal(direction) ((direction == LEFT) || (direction == RIGHT))
 #define is_vertical(direction) ((direction == UP) || (direction == DOWN))
+// Misc. macros
+#define in_range(x, min, max) (x >= min) && (x <= max)
 
 // Constants important for gamplay
 #define STARTING_SPEED 150
 #define STARTING_LENGTH 5
 #define POINTS_COUNTER_VALUE 1000
 #define SUPERFOOD_COUNTER_VALUE 10
-#define MIN_points 100
-#define MIN_SPEED 50
+#define MIN_POINTS 100
+#define STD_MAX_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.53 (Beta)"
+#define VERSION "0.54 (Beta)"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -46,6 +48,7 @@ static char *file_path = NULL;
 static unsigned int max_x;
 static unsigned int max_y;
 static unsigned int speed;
+static unsigned int max_speed = STD_MAX_SPEED;
 static long long points;
 static long long highscore;
 static WINDOW *game_win;
@@ -508,10 +511,10 @@ void play_round() {
 		if((x == food_x) && (y == food_y)) {
 			// Let the snake grow and change the speed
 			growing += GROW_FACTOR;
-			if(speed > MIN_SPEED) {
+			if(speed > max_speed) {
 				speed -= SPEED_FACTOR;
 			}
-			points += (points_counter + length + (STARTING_SPEED - speed)) * (superfood_counter == 0 ? 5 : 1);
+			points += (points_counter + length + (STARTING_SPEED - speed)*5) * (superfood_counter == 0 ? 5 : 1);
 			points_counter = POINTS_COUNTER_VALUE;
 			timeout(speed);
 			print_points();
@@ -531,15 +534,17 @@ void play_round() {
 			free(last_cell);
 			last_cell = new_last;
 		} else {
-			// If the snake is growing and moving, just decrement 'growing'
+			// If the snake is growing and moving, just decrement 'growing'...
 			growing--;
+			// ...and increment 'length'
+			length++;
 		}
 
 		// The old direction is the direction we had this round.
 		old_direction = direction;
 
 		// Decrement the points that will be added
-		if(points_counter > MIN_points) {
+		if(points_counter > MIN_POINTS) {
 			points_counter--;
 		}
 
@@ -656,7 +661,7 @@ void show_startscreen() {
 }
 
 void parse_arguments(int argc, char **argv) {
-	int arg, color, pattern, option_index = 0;
+	int arg, int_arg, option_index = 0;
 
 	static struct option long_opts[] =
 	{
@@ -670,10 +675,18 @@ void parse_arguments(int argc, char **argv) {
 		{"color", required_argument, NULL, 'c'},
 		{"walls", required_argument, NULL, 'w'},
 		{"filepath", required_argument, NULL, 'f'},
+		{"maximum-speed", required_argument, NULL, 1},
 	};
 
 	while((arg = getopt_long(argc, argv, "osif:rw:c:hv", long_opts, &option_index)) != -1) {
 		switch (arg) {
+			case 1:
+				int_arg = atoi(optarg);
+				if(in_range(int_arg, 0, 150)) {
+					max_speed = 150 - int_arg;
+					break;
+				}
+				goto help_text;
 			case 'o':
 				open_bounds_flag = TRUE;
 				break;
@@ -691,17 +704,17 @@ void parse_arguments(int argc, char **argv) {
 				remove_flag = TRUE;
 				break;
 			case 'w':
-				pattern = atoi(optarg);
-				if((pattern >= 0) && (pattern <= 5)) {
+				int_arg = atoi(optarg);
+				if(in_range(int_arg, 0, 5)) {
 					wall_flag = TRUE;
-					wall_pattern = pattern;
+					wall_pattern = int_arg;
 					break;
 				}
 				goto help_text;
 			case 'c':
-				color = atoi(optarg);
-				if((color >= 1) && (color <= 5)) {
-					snake_color = color;
+				int_arg = atoi(optarg);
+				if(in_range(int_arg, 1, 5)) {
+					snake_color = int_arg;
 					break;
 				} // else pass to help information
 			case '?': // Invalid parameter
@@ -718,6 +731,7 @@ void parse_arguments(int argc, char **argv) {
 				printf(" --ignore-savefile, -i\n\tIgnore savefile (don't read nor write)\n");
 				printf(" --filepath path, -f path\n\tSpecify alternate path savefile\n");
 				printf(" --vim\n\tUse vim-style direction controls (H,J,K,L)\n");
+				printf(" --maximum-speed <0,150>\n\tSpecify a new maximum speed (default: 100)\n");
 				printf(" --help, -h\n\tDisplay this information\n");
 				printf(" --version, -v\n\tDisplay version and license information\n\n");
 				printf("Ingame Controls:\n");
