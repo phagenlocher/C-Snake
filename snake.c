@@ -7,10 +7,12 @@
 #include <time.h>
 #include <pwd.h>
 
-// Macro to get the x-coordinate for a string to be centered on screen
-#define centered(string) ((max_x / 2) - (strlen(string) / 2))
+// Macro to get the x-coordinate for a string to be centered
+#define half_len(string) (strlen(string) / 2)
 // Macro to print a centered string on a window an a specific y-coordinate
-#define print_centered(window, y, string) (mvwaddstr(window, y, centered(string), string))
+#define print_centered(window, y, string) (mvwaddstr(window, y, (max_x/2) - half_len(string), string))
+// Macro to print an offset string on a window on a specific y-coordinate
+#define print_offset(window, x, y, string) (mvwaddstr(window, y, (max_x/2) - half_len(string) + x, string))
 // Direction macros
 #define is_horizontal(direction) ((direction == LEFT) || (direction == RIGHT))
 #define is_vertical(direction) ((direction == UP) || (direction == DOWN))
@@ -26,14 +28,13 @@
 #define STD_MAX_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.54 (Beta)"
+#define VERSION "0.55 (Beta)"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
-typedef enum Direction Direction;
-typedef struct LinkedCell LinkedCell;
-
 enum Direction {HOLD, UP, DOWN, RIGHT, LEFT};
+
+typedef struct LinkedCell LinkedCell;
 
 struct LinkedCell {
 	int x;
@@ -43,25 +44,25 @@ struct LinkedCell {
 };
 
 // Globals
-static char *txt_buf; // Buffer used for format strings
 static char *file_path = NULL;
 static unsigned int max_x;
 static unsigned int max_y;
 static unsigned int speed;
 static unsigned int max_speed = STD_MAX_SPEED;
-static long long points;
-static long long highscore;
-static WINDOW *game_win;
-static WINDOW *status_win;
+static long long points = 0;
+static long long highscore = 0;
+static WINDOW* game_win;
+static WINDOW* status_win;
+static WINDOW* options_win;
 static int remove_flag = FALSE;
 static int ignore_flag = FALSE;
 static int custom_flag = FALSE;
 static int open_bounds_flag = FALSE;
 static int skip_flag = FALSE;
 static int wall_flag = FALSE;
-static int wall_pattern;
-static int vim_flag = FALSE;
+static int wall_pattern = 0;
 static int snake_color = 2;
+static int up_key, down_key, left_key, right_key;
 // Logo generated on http://www.network-science.de/ascii/
 // Used font: nancyj
 static const char *LOGO[] = {
@@ -133,15 +134,63 @@ void clean_exit() {
 	exit(0);
 }
 
-void print_points() {
-	wattrset(status_win, A_UNDERLINE | A_BOLD);
-	sprintf(txt_buf, "Score: %lld", points);
-	print_centered(status_win, 1, txt_buf);
+void print_status(int length, int points_counter) {
+	char txt_buf[max_x+1];
+
+	// Deleting rows
+	wmove(status_win, 1, 0);
+	wclrtoeol(status_win);
+	wmove(status_win, 2, 0);
+	wclrtoeol(status_win);
+
+	// Redrawing the box
+	wattrset(status_win, A_NORMAL);
+	box(status_win, 0, 0);
+
+	// Set bold font
+	wattrset(status_win, A_BOLD);	
+
+	if(max_x > 50) {
+		// Print score
+		sprintf(txt_buf, "Score: %lld", points);
+		mvwaddstr(status_win, 1, (max_x/3) - half_len(txt_buf), txt_buf);
+
+		// Print highscore
+		sprintf(txt_buf, "Highscore: %lld", highscore);
+		mvwaddstr(status_win, 1, (2*max_x/3) - half_len(txt_buf), txt_buf);
+		
+		// Print points counter
+		sprintf(txt_buf, "Bonus: %d", points_counter);
+		mvwaddstr(status_win, 2, (max_x/3) - half_len(txt_buf), txt_buf);
+		
+		// Print length
+		sprintf(txt_buf, "Length: %d", length);
+		mvwaddstr(status_win, 2, (2*max_x/3) - half_len(txt_buf), txt_buf);
+	
+	} else {
+		// Print score
+		sprintf(txt_buf, "Score: %lld", points);
+		mvwaddstr(status_win, 1, (max_x/2) - half_len(txt_buf), txt_buf);
+
+		// Print points counter
+		sprintf(txt_buf, "Bonus: %d", points_counter);
+		mvwaddstr(status_win, 2, (max_x/2) - half_len(txt_buf), txt_buf);
+	
+	}
+
+	// Redrawing the box
+	wattrset(status_win, A_NORMAL);
+	box(status_win, 0, 0);
+	
+	// Refresh window
 	wrefresh(status_win);
 }
 
 void pause_game(const char string[], const int seconds) {
-	print_centered(status_win, 2, string);
+
+	wclear(status_win);
+	box(status_win, 0, 0);
+	print_centered(status_win, 1, string);
 	wrefresh(status_win);
 
 	// Pausing for 0 seconds means waiting for input
@@ -154,8 +203,7 @@ void pause_game(const char string[], const int seconds) {
 		flushinp(); // Flush typeahead during sleep
 	}
 	// Deleting second row
-	wmove(status_win, 2, 0);
-	wclrtoeol(status_win);
+	wclear(status_win);
 	// Redrawing the box
 	wattrset(status_win, A_NORMAL);
 	box(status_win, 0, 0);
@@ -168,7 +216,7 @@ int is_on_obstacle(LinkedCell *test_cell, const int x, const int y){
 		return FALSE;
 	}
 
-	do{
+	do {
 		if((test_cell->x == x) && (test_cell->y == y)) {
 			return TRUE;
 		}
@@ -184,7 +232,7 @@ void new_random_coordinates(LinkedCell *snake, LinkedCell *wall, int *x, int *y)
 	} while(is_on_obstacle(snake, *x, *y) || is_on_obstacle(wall, *x, *y));
 }
 
-LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedCell *last_cell) {
+LinkedCell *create_wall(int start, int end, int constant, enum Direction dir, LinkedCell *last_cell) {
 	int i;
 	LinkedCell *new_wall, *wall = malloc(sizeof(LinkedCell));
 
@@ -264,7 +312,7 @@ void free_linked_list(LinkedCell *cell) {
 }
 
 void play_round() {
-	round_start:
+round_start:
   	// Init max coordinates
 	getmaxyx(stdscr, max_y, max_x);
 	// Create subwindows and their coordinates
@@ -280,13 +328,8 @@ void play_round() {
 	speed = STARTING_SPEED;
 	timeout(speed); // The timeout for getch() makes up the game speed
 
-	// Init key variables
-	int key, up_key, down_key, left_key, right_key;
-	key = 0;
-	up_key = vim_flag ? 'k' : KEY_UP;
-	down_key = vim_flag ? 'j' : KEY_DOWN;
-	left_key = vim_flag ? 'h' : KEY_LEFT;
-	right_key = vim_flag ? 'l' : KEY_RIGHT;
+	// Init key
+	int key = 0;
 
 	// Init gameplay variables
 	int x, y, points_counter, lost, repeat, length, growing;
@@ -304,11 +347,11 @@ void play_round() {
 	food_x = food_y = 0;
 
 	// Init direction variables
-	Direction direction, old_direction;
+	enum Direction direction, old_direction;
 	direction = old_direction = HOLD;
 
-	// Print points after they have been set to 0
-	print_points();
+	// Print status window since points have been set to 0
+	print_status(length, points_counter);
 
 	// Create first cell for the snake
 	LinkedCell *last_cell, *head = malloc(sizeof(LinkedCell));
@@ -389,9 +432,13 @@ void play_round() {
 		mvwaddch(game_win, food_y, food_x, '0');
 		wattrset(game_win, COLOR_PAIR(snake_color) | A_BOLD);
 		mvwaddch(game_win, y, x, 'X');
+		
+		// Refresh game window
+		wrefresh(game_win);
 
+get_input: 
 		// Getting input
-		get_input: key = getch();
+		key = getch();
 
 		// Changing direction according to the input
 		if(key == left_key) {
@@ -517,7 +564,6 @@ void play_round() {
 			points += (points_counter + length + (STARTING_SPEED - speed)*5) * (superfood_counter == 0 ? 5 : 1);
 			points_counter = POINTS_COUNTER_VALUE;
 			timeout(speed);
-			print_points();
 			superfood_counter = (superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : superfood_counter-1;
 			new_random_coordinates(head, wall, &food_x, &food_y);
 		}
@@ -525,9 +571,9 @@ void play_round() {
 		// If the snake is not growing...
 		if(growing == 0) {
 			LinkedCell *new_last;
-			// ...delete the last character from the terminal...
+			// ...replace the last character from the terminal with space...
 			wattrset(game_win, A_NORMAL);
-			mvwaddch(game_win, last_cell->y,last_cell->x,' ');
+			mvwaddch(game_win, last_cell->y,last_cell->x, ' ');
 			// ...and free the memory for this cell.
 			last_cell->next->last = NULL;
 			new_last = last_cell->next;
@@ -548,13 +594,17 @@ void play_round() {
 			points_counter--;
 		}
 
+		// Update status window
+		print_status(length, points_counter);
+		
+		// Refresh game window
 		wrefresh(game_win);
 	}
 
 	// lost is set to FALSE if the player quit the game
 	if(lost) {
 		wattrset(status_win, COLOR_PAIR(3) | A_BOLD);
-		pause_game("--- YOU LOST ---", 2);
+		pause_game("--- GAME OVER ---", 2);
 	}
 
 	// Set a new highscore
@@ -573,12 +623,13 @@ void play_round() {
 	// Freeing memory used for the walls
 	free_linked_list(wall);
 
-	// Delete the screen content
-	clear();
-
 	// Delete windows
 	delwin(game_win);
 	delwin(status_win);
+
+	// Delete the screen content
+	clear();
+	refresh();
 
 	// If we are repeating we are jumping to the start of the function
 	if(repeat) {
@@ -586,84 +637,150 @@ void play_round() {
 	}
 }
 
+void show_options() {
+	int i, index = 0;
+	char txt_buf[3];
+
+option_show:
+	wclear(options_win);
+
+	const char *options[] = {
+		"     Borders:",
+		"       Walls:",
+		"Wall-pattern:",
+		"     Back    "
+	};
+
+	for(i = 0; i < 4; i++) {
+		wattrset(options_win, COLOR_PAIR(i==index ? 7 : 1));
+		print_offset(options_win, -10, i, options[i]);
+	}
+
+	wattrset(options_win, COLOR_PAIR(1));
+	print_offset(options_win, 10, 0, open_bounds_flag ? "Open" : "Closed");
+	print_offset(options_win, 10, 1, wall_flag ? "Active" : "Deactive");
+	sprintf(txt_buf, "%d", wall_pattern);
+	print_offset(options_win, 10, 2, txt_buf);
+
+	// Refresh window
+	wrefresh(options_win);
+
+	// Wait for input
+	int key = getch();
+	if (key == up_key) {
+		if (index == 0) 
+			index = 3;
+		else
+			index--;
+	} else if (key == down_key) {
+		index = (index + 1) % 4;
+	} else if (key == '\n') {
+		switch (index) 
+		{
+			case 0:
+				open_bounds_flag = !open_bounds_flag;
+				break;
+			case 1:
+				wall_flag = !wall_flag;
+				break;
+			case 2:
+				wall_pattern = (wall_pattern + 1) % 6;
+				break;
+			case 3:
+				return;
+		}
+	}
+
+	goto option_show;
+
+}
+
 void show_startscreen() {
-	int i, key, anchor;
+	int i, index = 0;
+	char txt_buf[40];
+show:
 	// Getting screen dimensions
 	getmaxyx(stdscr, max_y, max_x);
-	// Setting anchor, where the text will start
-	anchor = max_y / 4;
+	// Set getch to blocking mode
+	timeout(-1); 
 	// Clear the whole screen
 	clear();
 	// Printing logo and instructions
 	attrset(COLOR_PAIR(snake_color) | A_BOLD);
 	for(i = 0; i<6; i++) {
-		print_centered(stdscr, anchor + i, LOGO[i]);
+		print_centered(stdscr, (max_y / 4) + i, LOGO[i]);
 	}
-	attrset(COLOR_PAIR(1) | A_BOLD);
-	print_centered(stdscr, anchor + 7, "--- (P)lay Game --- (Q)uit --- (C)redits ---");
 
-	// If points != 0 print them to the screen
-	if(points != 0) {
-		sprintf(txt_buf, "--- Last Score: %lld ---", points);
-		print_centered(stdscr, anchor + 8, txt_buf);
-	}
-	if(highscore != 0) {
-		sprintf(txt_buf, "--- Highscore: %lld ---", highscore);
-		print_centered(stdscr, anchor + 9, txt_buf);
-	}
-	// Displaying information on options
-	if(open_bounds_flag) {
-		print_centered(stdscr, anchor + 10, "--- Playing with open bounds! ---");
-	}
-	if(wall_flag) {
-		print_centered(stdscr, anchor + 11, "--- Walls are activated! ---");
-	}
-	if(ignore_flag) {
-		print_centered(stdscr, anchor + 12, "--- Savefile is ignored! ---");
-	} else {
-		if(custom_flag && file_path != NULL) {
-			print_centered(stdscr, anchor + 12, "Used savefile:");
-			print_centered(stdscr, anchor + 13, file_path);
-		}
+	// Setting anchor where the options window will start
+	options_win = subwin(stdscr, (max_y * (3/4)) + i + 1, max_x, (max_y / 4) + i + 1, 0);
+
+	// Clear whatever is in the options window
+	wclear(options_win);
+	wrefresh(options_win);
+
+	const char *options[] = {
+		"Play Game",
+		"Options",
+		"Credits",
+		"Quit"
+	}; 
+
+	for(i = 0; i<4; i++) {
+		wattrset(options_win, COLOR_PAIR(i==index ? 7 : 1));
+		print_centered(options_win, i, options[i]);
 	}
 
 	// Printing verion
+	attrset(COLOR_PAIR(1) | A_BOLD);
 	sprintf(txt_buf, "Version: %s", VERSION);
 	print_centered(stdscr, max_y - 1, txt_buf);
 
 	// Wait for input
-	timeout(-1); // Set getch to blocking mode
-	while(TRUE) {
-		key = getch();
-		if((key == 'P') || (key == 'p')) {
-			clear();
-			play_round();
-			break;
-		}else if((key == 'Q') || (key == 'q')) {
-			clean_exit();
-		}else if((key == 'O') || (key == 'o')) {
-			open_bounds_flag = !open_bounds_flag;
-			break;
-		}else if((key == 'C') || (key == 'c')) {
-			for(i = 0; i<7; i++) {
-				move(anchor + 7 + i, 0);
-				clrtoeol();
-			}
-			print_centered(stdscr, anchor + 7, "--- Programming by Philipp Hagenlocher ---");
-			print_centered(stdscr, anchor + 8, "--- Please report any bugs you can find on GitHub ---");
-			print_centered(stdscr, anchor + 9, "--- Start with -v to get information on the license ---");
-			print_centered(stdscr, anchor + 10, "--- Press any key! ---");
-			refresh();
-			getch();
-			break;
+	int key = getch();
+	if (key == up_key) {
+		if (index == 0) 
+			index = 3;
+		else
+			index--;
+	} else if (key == down_key) {
+		index = (index + 1) % 4;
+	} else if (key == '\n') {
+		switch (index) 
+		{
+			case 0:
+				clear();
+				refresh();
+				play_round();
+				break;
+			case 1:
+				show_options();
+				break;
+			case 2:
+				print_centered(options_win, 0, "--- Programming by Philipp Hagenlocher ---");
+				print_centered(options_win, 1, "--- Please report any bugs you can find on GitHub ---");
+				print_centered(options_win, 2, "--- Start with -v to get information on the license ---");
+				print_centered(options_win, 3, "--- Press any key! ---");
+				wrefresh(options_win);
+				getch();
+				break;
+			case 3:
+				clean_exit();
 		}
 	}
+
+	// Delete options window
+	delwin(options_win);
+	
+	// Go back to the beginning
+	goto show;
 }
 
 void parse_arguments(int argc, char **argv) {
-	int arg, int_arg, option_index = 0;
+	int arg, int_arg, vim_flag, option_index;
+	option_index = 0;
+	vim_flag = FALSE;
 
-	static struct option long_opts[] =
+	const struct option long_opts[] =
 	{
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'v'},
@@ -720,7 +837,7 @@ void parse_arguments(int argc, char **argv) {
 			case '?': // Invalid parameter
 				// pass to help information
 			case 'h':
-				help_text:
+help_text:
 				printf("Usage: %s [options]\n", argv[0]);
 				printf("Options:\n");
 				printf(" --open-bounds, -o\n\tOuter bounds will let the snake pass through\n");
@@ -741,10 +858,17 @@ void parse_arguments(int argc, char **argv) {
 				printf(" Shift+R\n\tRestart Round (can be used to resize the game after windowsize has changed)\n");
 				exit(0);
 			case 'v':
-				printf("C-Snake %s\nCopyright (c) 2015-2019 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
+				printf("C-Snake %s\nCopyright (c) 2015-2020 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
 				exit(0);
 		}
 	}
+
+	// Set up keys
+	up_key = vim_flag ? 'k' : KEY_UP;
+	down_key = vim_flag ? 'j' : KEY_DOWN;
+	left_key = vim_flag ? 'h' : KEY_LEFT;
+	right_key = vim_flag ? 'l' : KEY_RIGHT;
+
 }
 
 int main(int argc, char **argv) {
@@ -774,6 +898,10 @@ int main(int argc, char **argv) {
 	init_pair(3, COLOR_RED,    background);
 	init_pair(4, COLOR_YELLOW, background);
 	init_pair(5, COLOR_BLUE,   background);
+	init_pair(6, COLOR_BLACK,  COLOR_GREEN);
+	init_pair(7, COLOR_BLACK,  COLOR_RED);
+	init_pair(8, COLOR_BLACK,  COLOR_YELLOW);
+	init_pair(9, COLOR_BLACK,  COLOR_BLUE);
   	bkgd(COLOR_PAIR(1));
   	curs_set(FALSE);
 	noecho();
@@ -789,9 +917,6 @@ int main(int argc, char **argv) {
 	if((max_x < 64) || (max_y < 19)) {
 		skip_flag = TRUE;
 	}
-	// 19 chars are used for the max num for a long long. Longest additional
-	// string ("--- Last Score: %lld ---") has 20 chars.
-	txt_buf = malloc(40);
 
 	// Endless loop until the user quits the game
 	while(TRUE) {
