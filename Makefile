@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -lncurses -s -O2 -fstack-protector-strong -fomit-frame-pointer -fPIE -Wl,-z,now -D_FORTIFY_SOURCE=2 -fshort-enums -Wall
+CFLAGS = -lncurses -s -O3 -fstack-protector-strong -fomit-frame-pointer -fPIE -Wl,-z,now -D_FORTIFY_SOURCE=2 -fshort-enums -Wall -pedantic
 TARGET = csnake
 bindir = /usr/local/bin
 
