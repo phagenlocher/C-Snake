@@ -1,10 +1,10 @@
 CC = gcc
-CFLAGS = -lncurses -s -O3 -fstack-protector-strong -fomit-frame-pointer -fPIE -Wl,-z,now -D_FORTIFY_SOURCE=2 -fshort-enums -Wall -pedantic
+CFLAGS = -s -O3 -fstack-protector-strong -fomit-frame-pointer -fPIE -Wl,-z,now -D_FORTIFY_SOURCE=2 -fshort-enums -Wall -pedantic
 TARGET = csnake
 bindir = /usr/local/bin
 
 all: snake.c
-	$(CC) $(CFLAGS) snake.c -o $(TARGET)
+	$(CC) $(CFLAGS) snake.c -o $(TARGET) -lncurses
 
 install: all
 	mv $(TARGET) $(DESTDIR)$(bindir)/$(TARGET)
