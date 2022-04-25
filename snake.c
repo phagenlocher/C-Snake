@@ -21,7 +21,7 @@
 #define STD_MAX_SPEED 50
 #define GROW_FACTOR 10
 #define SPEED_FACTOR 2
-#define VERSION "0.56 (Beta)"
+#define VERSION "0.56.1 (Beta)"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -926,7 +926,7 @@ help_text:
 				printf(" Shift+R\n\tRestart Round (can be used to resize the game after windowsize has changed)\n");
 				exit(0);
 			case 'v':
-				printf("C-Snake %s\nCopyright (c) 2015-2020 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
+				printf("C-Snake %s\nCopyright (c) 2015-2022 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
 				exit(0);
 		}
 	}
