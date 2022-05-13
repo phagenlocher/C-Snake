@@ -1,14 +1,12 @@
 # C-Snake
 
-![Status](http://home.in.tum.de/~hagenloc/CSNAKE/Status-Beta-green.svg)
-
 The classic game: **Snake**
 
-Written with ncurses, it uses the terminal to display its gameplay.
+This is a basic implementation focusing on a simple design, small code base, minimal external dependencies and good code documentation. Therefore, this project is a good starting-off point if you want to create your own snake implementation.
 
 ## How to play
 
-Control the snake with the arrow keys. Holding down a key in a certain direction will make the snake faster! You can pause the game by pressing **ENTER**. 
+Control the snake with arrow keys. Holding down a key in a certain direction will make the snake faster! You can pause the game by pressing **ENTER**. 
 
 **SHIFT + Q** will exit the current game and will leave you at the title screen. **SHIFT + R** will restart the round. If the size of your terminal has changed you can use this to refit the game to your terminal.
 
@@ -34,11 +32,11 @@ Arguments:
 ## Requirements / Dependencies
 * gcc
 * make
-* libncurses5
+* libncurses
 
 On Ubuntu or Debian you can use this to install the dependencies:
 ```
-apt-get install gcc make libncurses5-dev
+apt-get install gcc make libncurses-dev
 ```
 
 ## How to compile
