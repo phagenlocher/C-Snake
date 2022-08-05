@@ -25,11 +25,19 @@
 #define GRACE_FRAMES 3
 #define VERSION "0.57.0 (Beta)"
 #define STD_FILE_NAME ".csnake"
-#define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
+#define FILE_LENGTH 20 // 19 characters are needed to display the max number for long long
 
-enum Direction {HOLD, UP, DOWN, RIGHT, LEFT};
+enum Direction
+{
+	HOLD,
+	UP,
+	DOWN,
+	RIGHT,
+	LEFT
+};
 
-typedef struct linked_cell_t {
+typedef struct linked_cell_t
+{
 	int x;
 	int y;
 	struct linked_cell_t *last;
@@ -44,9 +52,9 @@ static unsigned int speed;
 static unsigned int max_speed = STD_MAX_SPEED;
 static long long points = 0;
 static long long highscore = 0;
-static WINDOW* game_win;
-static WINDOW* status_win;
-static WINDOW* options_win;
+static WINDOW *game_win;
+static WINDOW *status_win;
+static WINDOW *options_win;
 static int remove_flag = FALSE;
 static int ignore_flag = FALSE;
 static int custom_flag = FALSE;
@@ -64,20 +72,21 @@ static const char *LOGO[] = {
 	"88                 `Y88888b. 88d888b. .d8888b. 88  .dP  .d8888b.",
 	"88        88888888       `8b 88'  `88 88'  `88 88888'   88ooood8",
 	"Y8.   .88          d8'   .8P 88    88 88.  .88 88  `8b. 88.  ...",
-	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"
-};
+	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"};
 
-int init_file_path() {
+int init_file_path()
+{
 	// The path has been set somehow, so we don't overwrite it
 	// This is an error
-	if(file_path != NULL)
+	if (file_path != NULL)
 		return -1;
 
 	// Get "HOME" environment variable
 	char *home_dir = getenv("HOME");
 
 	// We couldn't get the environment variable so we ignore the savefile
-	if(home_dir == NULL) {
+	if (home_dir == NULL)
+	{
 		ignore_flag = TRUE;
 		file_path = NULL;
 		return -1;
@@ -87,7 +96,8 @@ int init_file_path() {
 	file_path = malloc(strlen(home_dir) + strlen(STD_FILE_NAME) + 2);
 
 	// Write path to the global variable
-	if(sprintf(file_path, "%s/%s", home_dir, STD_FILE_NAME) < 1) {
+	if (sprintf(file_path, "%s/%s", home_dir, STD_FILE_NAME) < 1)
+	{
 		// If something went wrong, deallocate memory and ignore savefile
 		free(file_path);
 		ignore_flag = TRUE;
@@ -98,23 +108,24 @@ int init_file_path() {
 	return 1;
 }
 
-void write_score_file() {
+void write_score_file()
+{
 	// If we ignore the score file we return
-	if(ignore_flag)
+	if (ignore_flag)
 		return;
 
 	// Memory for the string representation of the score
 	char score_str[FILE_LENGTH];
 
 	// Write highscore into memory
-	sprintf(score_str, "%.*lld", FILE_LENGTH-1, highscore);
+	sprintf(score_str, "%.*lld", FILE_LENGTH - 1, highscore);
 
 	// Open file
 	FILE *file = fopen(file_path, "w");
 
 	// Something went wrong
 	// TODO: Have error handling
-	if(file == NULL)
+	if (file == NULL)
 		return;
 
 	// Write score to file and close it
@@ -122,9 +133,10 @@ void write_score_file() {
 	fclose(file);
 }
 
-void read_score_file() {
+void read_score_file()
+{
 	// If we ignore the score file we return
-	if(ignore_flag)
+	if (ignore_flag)
 		return;
 
 	// Memory for file contents
@@ -135,13 +147,14 @@ void read_score_file() {
 
 	// Something went wrong
 	// TODO: Have error handling
-	if(file == NULL) {
+	if (file == NULL)
+	{
 		highscore = 0;
 		return;
 	}
 
 	// Read file contents and interpret the score
-	if(fgets(content, FILE_LENGTH, file) == NULL)
+	if (fgets(content, FILE_LENGTH, file) == NULL)
 		highscore = 0;
 	else
 		highscore = atoll(content);
@@ -150,7 +163,8 @@ void read_score_file() {
 	fclose(file);
 }
 
-void clean_exit() {
+void clean_exit()
+{
 	// Write highscore to file
 	write_score_file();
 
@@ -161,21 +175,25 @@ void clean_exit() {
 	exit(0);
 }
 
-inline size_t half_len(const char string[]) {
+inline size_t half_len(const char string[])
+{
 	return strlen(string) / 2;
 }
 
-void print_centered(WINDOW *window, int y, const char string[]) {
+void print_centered(WINDOW *window, int y, const char string[])
+{
 	int x = (max_x / 2) - half_len(string);
 	mvwaddstr(window, y, x, string);
 }
 
-void print_offset(WINDOW *window, int x_offset, int y, const char string[]) {
+void print_offset(WINDOW *window, int x_offset, int y, const char string[])
+{
 	int x = (max_x / 2) - half_len(string);
 	mvwaddstr(window, y, x + x_offset, string);
 }
 
-void print_status(int length, int points_counter) {
+void print_status(int length, int points_counter)
+{
 	char txt_buf[50];
 
 	// Deleting rows
@@ -190,37 +208,41 @@ void print_status(int length, int points_counter) {
 	// Set bold font
 	wattrset(status_win, A_BOLD);
 
-	if(max_x > 50) {
+	if (max_x > 50)
+	{
 		// Print score
 		sprintf(txt_buf, "Score: %lld", points);
-		mvwaddstr(status_win, 1, (max_x/3) - half_len(txt_buf), txt_buf);
+		mvwaddstr(status_win, 1, (max_x / 3) - half_len(txt_buf), txt_buf);
 
 		// Print highscore
 		sprintf(txt_buf, "Highscore: %lld", highscore);
-		mvwaddstr(status_win, 1, (2*max_x/3) - half_len(txt_buf), txt_buf);
+		mvwaddstr(status_win, 1, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
 
 		// Print points counter
 		sprintf(txt_buf, "Bonus: %d", points_counter);
-		mvwaddstr(status_win, 2, (max_x/3) - half_len(txt_buf), txt_buf);
+		mvwaddstr(status_win, 2, (max_x / 3) - half_len(txt_buf), txt_buf);
 
 		// Print length
 		sprintf(txt_buf, "Length: %d", length);
-		mvwaddstr(status_win, 2, (2*max_x/3) - half_len(txt_buf), txt_buf);
-	} else {
+		mvwaddstr(status_win, 2, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
+	}
+	else
+	{
 		// Print score
 		sprintf(txt_buf, "Score: %lld", points);
-		mvwaddstr(status_win, 1, (max_x/2) - half_len(txt_buf), txt_buf);
+		mvwaddstr(status_win, 1, (max_x / 2) - half_len(txt_buf), txt_buf);
 
 		// Print points counter
 		sprintf(txt_buf, "Bonus: %d", points_counter);
-		mvwaddstr(status_win, 2, (max_x/2) - half_len(txt_buf), txt_buf);
+		mvwaddstr(status_win, 2, (max_x / 2) - half_len(txt_buf), txt_buf);
 	}
 
 	// Refresh window
 	wrefresh(status_win);
 }
 
-void pause_game(const char string[], const int seconds) {
+void pause_game(const char string[], const int seconds)
+{
 	// Clear status window
 	wclear(status_win);
 
@@ -234,11 +256,14 @@ void pause_game(const char string[], const int seconds) {
 	wrefresh(status_win);
 
 	// Pausing for 0 seconds means waiting for input
-	if(seconds == 0) {
+	if (seconds == 0)
+	{
 		timeout(-1); // getch is in blocking mode
 		getch();
 		timeout(speed); // getch is in nonblocking mode
-	} else {
+	}
+	else
+	{
 		sleep(seconds);
 		flushinp(); // Flush typeahead during sleep
 	}
@@ -253,44 +278,52 @@ void pause_game(const char string[], const int seconds) {
 	wrefresh(status_win);
 }
 
-int is_on_obstacle(linked_cell_t *test_cell, const int x, const int y){
+int is_on_obstacle(linked_cell_t *test_cell, const int x, const int y)
+{
 	// Not a valid cell to test
-	if(test_cell == NULL)
+	if (test_cell == NULL)
 		return FALSE;
 
-	do {
+	do
+	{
 		// A cell has the same coordinates as the point to check
-		if((test_cell->x == x) && (test_cell->y == y))
+		if ((test_cell->x == x) && (test_cell->y == y))
 			return TRUE;
 
 		// Check next cell
 		test_cell = test_cell->last;
-	} while(test_cell != NULL);
+	} while (test_cell != NULL);
 
 	// No cell found
 	return FALSE;
 }
 
-void new_random_coordinates(linked_cell_t *snake, linked_cell_t *wall, int *x, int *y) {
-	do {
+void new_random_coordinates(linked_cell_t *snake, linked_cell_t *wall, int *x, int *y)
+{
+	do
+	{
 		// Generate random coordinates
 		*x = rand() % max_x;
 		*y = rand() % max_y;
 
 		// Check if the coordinates are on the snake or wall
 		// If so, generate new values
-	} while(is_on_obstacle(snake, *x, *y) || is_on_obstacle(wall, *x, *y));
+	} while (is_on_obstacle(snake, *x, *y) || is_on_obstacle(wall, *x, *y));
 }
 
-linked_cell_t *create_wall(int start, int end, int constant, enum Direction dir, linked_cell_t *last_cell) {
+linked_cell_t *create_wall(int start, int end, int constant, enum Direction dir, linked_cell_t *last_cell)
+{
 	int i;
 	linked_cell_t *new_wall, *wall = malloc(sizeof(linked_cell_t));
 
 	// Based on the direction set either x or y to a constant value
-	if(is_horizontal(dir)) {
+	if (is_horizontal(dir))
+	{
 		wall->x = start;
 		wall->y = constant;
-	} else {
+	}
+	else
+	{
 		wall->x = constant;
 		wall->y = start;
 	}
@@ -301,45 +334,50 @@ linked_cell_t *create_wall(int start, int end, int constant, enum Direction dir,
 
 	// Based on the direction build a wall from start to end
 	// and put it infrnt of the old list
-	switch (dir) {
-		case UP:
-			for(i = start-1; i > end; i--) {
-				new_wall = malloc(sizeof(linked_cell_t));
-				new_wall->x = constant;
-				new_wall->y = i;
-				new_wall->last = wall;
-				wall = new_wall;
-			}
-			break;
-		case DOWN:
-			for(i = start+1; i < end; i++) {
-				new_wall = malloc(sizeof(linked_cell_t));
-				new_wall->x = constant;
-				new_wall->y = i;
-				new_wall->last = wall;
-				wall = new_wall;
-			}
-			break;
-		case LEFT:
-			for(i = start-1; i > end; i--) {
-				new_wall = malloc(sizeof(linked_cell_t));
-				new_wall->x = i;
-				new_wall->y = constant;
-				new_wall->last = wall;
-				wall = new_wall;
-			}
-			break;
-		case RIGHT:
-			for(i = start+1; i < end; i++) {
-				new_wall = malloc(sizeof(linked_cell_t));
-				new_wall->x = i;
-				new_wall->y = constant;
-				new_wall->last = wall;
-				wall = new_wall;
-			}
-			break;
-		case HOLD:
-			break;
+	switch (dir)
+	{
+	case UP:
+		for (i = start - 1; i > end; i--)
+		{
+			new_wall = malloc(sizeof(linked_cell_t));
+			new_wall->x = constant;
+			new_wall->y = i;
+			new_wall->last = wall;
+			wall = new_wall;
+		}
+		break;
+	case DOWN:
+		for (i = start + 1; i < end; i++)
+		{
+			new_wall = malloc(sizeof(linked_cell_t));
+			new_wall->x = constant;
+			new_wall->y = i;
+			new_wall->last = wall;
+			wall = new_wall;
+		}
+		break;
+	case LEFT:
+		for (i = start - 1; i > end; i--)
+		{
+			new_wall = malloc(sizeof(linked_cell_t));
+			new_wall->x = i;
+			new_wall->y = constant;
+			new_wall->last = wall;
+			wall = new_wall;
+		}
+		break;
+	case RIGHT:
+		for (i = start + 1; i < end; i++)
+		{
+			new_wall = malloc(sizeof(linked_cell_t));
+			new_wall->x = i;
+			new_wall->y = constant;
+			new_wall->last = wall;
+			wall = new_wall;
+		}
+		break;
+	case HOLD:
+		break;
 	}
 
 	// Paint the wall
@@ -347,32 +385,36 @@ linked_cell_t *create_wall(int start, int end, int constant, enum Direction dir,
 	linked_cell_t *tmp_cell1, *tmp_cell2;
 	tmp_cell2 = wall;
 	wattrset(game_win, COLOR_PAIR(5) | A_BOLD);
-	do {
+	do
+	{
 		tmp_cell1 = tmp_cell2;
 		mvwaddch(game_win, tmp_cell1->y, tmp_cell1->x, ACS_CKBOARD);
 		tmp_cell2 = tmp_cell1->last;
-	} while(tmp_cell2 != NULL);
+	} while (tmp_cell2 != NULL);
 
 	return wall;
 }
 
-void free_linked_list(linked_cell_t *cell) {
+void free_linked_list(linked_cell_t *cell)
+{
 	// Nothing valid to free
-	if(cell == NULL)
+	if (cell == NULL)
 		return;
 
 	// Free list
 	linked_cell_t *tmp_cell;
-	do {
+	do
+	{
 		tmp_cell = cell->last;
 		free(cell);
 		cell = tmp_cell;
-	} while(cell != NULL);
+	} while (cell != NULL);
 }
 
-void play_round() {
+void play_round()
+{
 round_start:
-  	// Init max coordinates
+	// Init max coordinates
 	getmaxyx(stdscr, max_y, max_x);
 
 	// Create subwindows and their coordinates
@@ -427,60 +469,63 @@ round_start:
 	// Creating walls (all walls are referenced by one pointer)
 	linked_cell_t *wall = NULL;
 	int bigger, smaller, constant;
-	if(wall_flag) {
-		switch (wall_pattern) {
-			case 1:
-				wall = create_wall(0, max_y / 4, max_x / 2, DOWN, NULL);
-				wall = create_wall(max_y, 3 * max_y / 4, max_x / 2, UP, wall);
-				wall = create_wall(0, max_x / 4, max_y / 2, RIGHT, wall);
-				wall = create_wall(max_x, 3 * max_x / 4, max_y / 2, LEFT, wall);
-				break;
-			case 2:
-				wall = create_wall(max_y / 4, 3 * max_y / 4, max_x / 4, DOWN, NULL);
-				wall = create_wall(max_y / 4, 3 * max_y / 4, 3 * max_x / 4, DOWN, wall);
-				break;
-			case 3:
-				wall = create_wall(max_x / 4, 3 * max_x / 4, max_y / 4, RIGHT, NULL);
-				wall = create_wall(max_x / 4, 3 * max_x / 4, 3 * max_y / 4, RIGHT, wall);
-				break;
-			case 4:
-				wall = create_wall(max_y / 2 + 2, 3 * max_y / 4, max_x / 4, DOWN, NULL);
-				wall = create_wall(max_y / 4, max_y / 2 - 1, max_x / 4, DOWN, wall);
-				wall = create_wall(max_y / 2 + 2, 3 * max_y / 4, 3 * max_x / 4, DOWN, wall);
-				wall = create_wall(max_y / 4, max_y / 2 - 1, 3 * max_x / 4, DOWN, wall);
-				wall = create_wall(max_x / 4, max_x / 2 - 1, max_y / 4, RIGHT, wall);
-				wall = create_wall(max_x / 4, max_x / 2 - 1, 3 * max_y / 4, RIGHT, wall);
-				wall = create_wall(max_x / 2 + 2, 3 * max_x / 4, max_y / 4, RIGHT, wall);
-				wall = create_wall(max_x / 2 + 2, 3 * max_x / 4 + 1, 3 * max_y / 4, RIGHT, wall);
-				break;
-			case 5:
-				wall = create_wall(0, max_y / 4, max_x / 4, DOWN, NULL);
-				wall = create_wall(0, max_y / 4, 3 * max_x / 4, DOWN, wall);
-				wall = create_wall(0, max_y / 4, max_x / 2, DOWN, wall);
-				wall = create_wall(max_y, 3 * max_y / 4, max_x / 4, UP, wall);
-				wall = create_wall(max_y, 3 * max_y / 4, 3 * max_x / 4, UP, wall);
-				wall = create_wall(max_y, 3 * max_y / 4, max_x / 2, UP, wall);
-				wall = create_wall(0, max_x / 4, max_y / 2, RIGHT, wall);
-				wall = create_wall(max_x, 3 * max_x / 4, max_y / 2, LEFT, wall);
-				break;
-			default:
-				// Random wall creation
-				constant = rand() % (max_y / 2 - 1);
-				do {
-					// Since (smaller - 1) is used for modulo division
-					// it has to be bigger than 1
-					smaller = (rand() % (max_x - 4)) / 2;
-				} while(smaller <= 1);
-				bigger = max_x - smaller;
-				wall = create_wall(smaller, bigger, constant, RIGHT, NULL);
-				wall = create_wall(smaller, bigger, max_y - constant - 1, RIGHT, wall);
+	if (wall_flag)
+	{
+		switch (wall_pattern)
+		{
+		case 1:
+			wall = create_wall(0, max_y / 4, max_x / 2, DOWN, NULL);
+			wall = create_wall(max_y, 3 * max_y / 4, max_x / 2, UP, wall);
+			wall = create_wall(0, max_x / 4, max_y / 2, RIGHT, wall);
+			wall = create_wall(max_x, 3 * max_x / 4, max_y / 2, LEFT, wall);
+			break;
+		case 2:
+			wall = create_wall(max_y / 4, 3 * max_y / 4, max_x / 4, DOWN, NULL);
+			wall = create_wall(max_y / 4, 3 * max_y / 4, 3 * max_x / 4, DOWN, wall);
+			break;
+		case 3:
+			wall = create_wall(max_x / 4, 3 * max_x / 4, max_y / 4, RIGHT, NULL);
+			wall = create_wall(max_x / 4, 3 * max_x / 4, 3 * max_y / 4, RIGHT, wall);
+			break;
+		case 4:
+			wall = create_wall(max_y / 2 + 2, 3 * max_y / 4, max_x / 4, DOWN, NULL);
+			wall = create_wall(max_y / 4, max_y / 2 - 1, max_x / 4, DOWN, wall);
+			wall = create_wall(max_y / 2 + 2, 3 * max_y / 4, 3 * max_x / 4, DOWN, wall);
+			wall = create_wall(max_y / 4, max_y / 2 - 1, 3 * max_x / 4, DOWN, wall);
+			wall = create_wall(max_x / 4, max_x / 2 - 1, max_y / 4, RIGHT, wall);
+			wall = create_wall(max_x / 4, max_x / 2 - 1, 3 * max_y / 4, RIGHT, wall);
+			wall = create_wall(max_x / 2 + 2, 3 * max_x / 4, max_y / 4, RIGHT, wall);
+			wall = create_wall(max_x / 2 + 2, 3 * max_x / 4 + 1, 3 * max_y / 4, RIGHT, wall);
+			break;
+		case 5:
+			wall = create_wall(0, max_y / 4, max_x / 4, DOWN, NULL);
+			wall = create_wall(0, max_y / 4, 3 * max_x / 4, DOWN, wall);
+			wall = create_wall(0, max_y / 4, max_x / 2, DOWN, wall);
+			wall = create_wall(max_y, 3 * max_y / 4, max_x / 4, UP, wall);
+			wall = create_wall(max_y, 3 * max_y / 4, 3 * max_x / 4, UP, wall);
+			wall = create_wall(max_y, 3 * max_y / 4, max_x / 2, UP, wall);
+			wall = create_wall(0, max_x / 4, max_y / 2, RIGHT, wall);
+			wall = create_wall(max_x, 3 * max_x / 4, max_y / 2, LEFT, wall);
+			break;
+		default:
+			// Random wall creation
+			constant = rand() % (max_y / 2 - 1);
+			do
+			{
+				// Since (smaller - 1) is used for modulo division
+				// it has to be bigger than 1
+				smaller = (rand() % (max_x - 4)) / 2;
+			} while (smaller <= 1);
+			bigger = max_x - smaller;
+			wall = create_wall(smaller, bigger, constant, RIGHT, NULL);
+			wall = create_wall(smaller, bigger, max_y - constant - 1, RIGHT, wall);
 
-				constant = rand() % (smaller - 1);
-				smaller = (rand() % max_y) / 2;
-				bigger = max_y - smaller + 1;
-				wall = create_wall(smaller, bigger, constant, DOWN, wall);
-				wall = create_wall(smaller, bigger, max_x - constant, DOWN, wall);
-				break;
+			constant = rand() % (smaller - 1);
+			smaller = (rand() % max_y) / 2;
+			bigger = max_y - smaller + 1;
+			wall = create_wall(smaller, bigger, constant, DOWN, wall);
+			wall = create_wall(smaller, bigger, max_x - constant, DOWN, wall);
+			break;
 		}
 	}
 
@@ -488,7 +533,8 @@ round_start:
 	new_random_coordinates(head, wall, &food_x, &food_y);
 
 	// Game-Loop
-	while(TRUE) {
+	while (TRUE)
+	{
 
 		// Painting the food and the snakes head
 		wattrset(game_win, COLOR_PAIR((superfood_counter == 0) ? 4 : 3) | A_BOLD);
@@ -499,38 +545,54 @@ round_start:
 		// Refresh game window
 		wrefresh(game_win);
 
-get_input:
+	get_input:
 		// Getting input
 		key = getch();
 
 		// Changing direction according to the input
-		if(key == left_key) {
-			if(direction != RIGHT)
+		if (key == left_key)
+		{
+			if (direction != RIGHT)
 				direction = LEFT;
-		}else if(key == right_key) {
-			if(direction != LEFT)
+		}
+		else if (key == right_key)
+		{
+			if (direction != LEFT)
 				direction = RIGHT;
-		}else if(key == up_key) {
-			if(direction != DOWN)
+		}
+		else if (key == up_key)
+		{
+			if (direction != DOWN)
 				direction = UP;
-		}else if(key == down_key) {
-			if(direction != UP)
+		}
+		else if (key == down_key)
+		{
+			if (direction != UP)
 				direction = DOWN;
-		}else if((key == '\n') && (direction != HOLD)) { // Enter-key
+		}
+		else if ((key == '\n') && (direction != HOLD))
+		{ // Enter-key
 			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
 			pause_game("--- PAUSED ---", 0);
-		}else if(key == 'R') {
+		}
+		else if (key == 'R')
+		{
 			lost = FALSE;
 			repeat = TRUE;
 			break;
-		}else if(key == 'Q') {
+		}
+		else if (key == 'Q')
+		{
 			// If the title screen is disabled we will exit the programm
-			if(skip_flag) {
+			if (skip_flag)
+			{
 				clean_exit();
 			}
 			lost = FALSE;
 			break;
-		}else if(direction == HOLD) {
+		}
+		else if (direction == HOLD)
+		{
 			// If the snake is not moving, there is no update to be made
 			goto get_input;
 		}
@@ -543,71 +605,114 @@ get_input:
 		// character on the coordinate BEFORE changing the coordinate
 		// Paint the snake in the specified color
 		wattrset(game_win, COLOR_PAIR(snake_color) | A_BOLD);
-		if(direction == UP) {
-			if(old_direction == LEFT) {
-				mvwaddch(game_win, y,x,ACS_LLCORNER);
-			} else if(old_direction == RIGHT) {
-				mvwaddch(game_win, y,x,ACS_LRCORNER);
-			} else {
-				mvwaddch(game_win, y,x,ACS_VLINE);
+		if (direction == UP)
+		{
+			if (old_direction == LEFT)
+			{
+				mvwaddch(game_win, y, x, ACS_LLCORNER);
+			}
+			else if (old_direction == RIGHT)
+			{
+				mvwaddch(game_win, y, x, ACS_LRCORNER);
+			}
+			else
+			{
+				mvwaddch(game_win, y, x, ACS_VLINE);
 			}
 			y--;
-		}else if(direction == DOWN) {
-			if(old_direction == LEFT) {
-				mvwaddch(game_win, y,x,ACS_ULCORNER);
-			} else if(old_direction == RIGHT) {
-				mvwaddch(game_win, y,x,ACS_URCORNER);
-			} else {
-				mvwaddch(game_win, y,x,ACS_VLINE);
+		}
+		else if (direction == DOWN)
+		{
+			if (old_direction == LEFT)
+			{
+				mvwaddch(game_win, y, x, ACS_ULCORNER);
+			}
+			else if (old_direction == RIGHT)
+			{
+				mvwaddch(game_win, y, x, ACS_URCORNER);
+			}
+			else
+			{
+				mvwaddch(game_win, y, x, ACS_VLINE);
 			}
 			y++;
-		}else if(direction == LEFT) {
-			if(old_direction == UP) {
-				mvwaddch(game_win, y,x,ACS_URCORNER);
-			} else if(old_direction == DOWN) {
-				mvwaddch(game_win, y,x,ACS_LRCORNER);
-			} else {
-				mvwaddch(game_win, y,x,ACS_HLINE);
+		}
+		else if (direction == LEFT)
+		{
+			if (old_direction == UP)
+			{
+				mvwaddch(game_win, y, x, ACS_URCORNER);
+			}
+			else if (old_direction == DOWN)
+			{
+				mvwaddch(game_win, y, x, ACS_LRCORNER);
+			}
+			else
+			{
+				mvwaddch(game_win, y, x, ACS_HLINE);
 			}
 			x--;
-		}else if(direction == RIGHT) {
-			if(old_direction == UP) {
-				mvwaddch(game_win, y,x,ACS_ULCORNER);
-			} else if(old_direction == DOWN) {
-				mvwaddch(game_win, y,x,ACS_LLCORNER);
-			} else {
-				mvwaddch(game_win, y,x,ACS_HLINE);
+		}
+		else if (direction == RIGHT)
+		{
+			if (old_direction == UP)
+			{
+				mvwaddch(game_win, y, x, ACS_ULCORNER);
+			}
+			else if (old_direction == DOWN)
+			{
+				mvwaddch(game_win, y, x, ACS_LLCORNER);
+			}
+			else
+			{
+				mvwaddch(game_win, y, x, ACS_HLINE);
 			}
 			x++;
 		}
 
-		if(open_bounds_flag) {
+		if (open_bounds_flag)
+		{
 			// If you hit the outer bounds you'll end up on the other side
-			if(y < 0) {
-				y = max_y-1;
-			}else if(y >= max_y) {
+			if (y < 0)
+			{
+				y = max_y - 1;
+			}
+			else if (y >= max_y)
+			{
 				y = 0;
-			}else if(x < 0) {
-				x = max_x-1;
-			}else if(x >= max_x){
+			}
+			else if (x < 0)
+			{
+				x = max_x - 1;
+			}
+			else if (x >= max_x)
+			{
 				x = 0;
 			}
-		} else {
+		}
+		else
+		{
 			// If the bounds aren't open you will loose
-			if((y < 0) || (x < 0)) {
+			if ((y < 0) || (x < 0))
+			{
 				break;
 			}
-			if((y >= max_y) || (x >= max_x)) {
+			if ((y >= max_y) || (x >= max_x))
+			{
 				break;
 			}
 		}
 
 		// The snake hits something
-		if(is_on_obstacle(head, x, y) || is_on_obstacle(wall, x, y)) {
-			if(grace_frames == 0) {
+		if (is_on_obstacle(head, x, y) || is_on_obstacle(wall, x, y))
+		{
+			if (grace_frames == 0)
+			{
 				// No grace frames left, game over
 				break;
-			} else {
+			}
+			else
+			{
 				// We still have grace frames so we reset the coordinate and
 				// let the player change the direction
 				grace_frames--;
@@ -632,31 +737,36 @@ get_input:
 		mvwaddch(game_win, y, x, 'X');
 
 		// Head hits the food
-		if((x == food_x) && (y == food_y)) {
+		if ((x == food_x) && (y == food_y))
+		{
 			// Let the snake grow and change the speed
 			growing += superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
-			if(speed > max_speed) {
+			if (speed > max_speed)
+			{
 				speed -= SPEED_FACTOR;
 			}
-			points += (points_counter + length + (STARTING_SPEED - speed)*5) * (superfood_counter == 0 ? 5 : 1);
+			points += (points_counter + length + (STARTING_SPEED - speed) * 5) * (superfood_counter == 0 ? 5 : 1);
 			points_counter = POINTS_COUNTER_VALUE;
 			timeout(speed);
-			superfood_counter = (superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : superfood_counter-1;
+			superfood_counter = (superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : superfood_counter - 1;
 			new_random_coordinates(head, wall, &food_x, &food_y);
 		}
 
 		// If the snake is not growing...
-		if(growing == 0) {
+		if (growing == 0)
+		{
 			linked_cell_t *new_last;
 			// ...replace the last character from the terminal with space...
 			wattrset(game_win, A_NORMAL);
-			mvwaddch(game_win, last_cell->y,last_cell->x, ' ');
+			mvwaddch(game_win, last_cell->y, last_cell->x, ' ');
 			// ...and free the memory for this cell.
 			last_cell->next->last = NULL;
 			new_last = last_cell->next;
 			free(last_cell);
 			last_cell = new_last;
-		} else {
+		}
+		else
+		{
 			// If the snake is growing and moving, just decrement 'growing'...
 			growing--;
 			// ...and increment 'length'
@@ -667,7 +777,8 @@ get_input:
 		old_direction = direction;
 
 		// Decrement the points that will be added
-		if(points_counter > MIN_POINTS) {
+		if (points_counter > MIN_POINTS)
+		{
 			points_counter--;
 		}
 
@@ -679,13 +790,15 @@ get_input:
 	}
 
 	// lost is set to FALSE if the player quit the game
-	if(lost) {
+	if (lost)
+	{
 		wattrset(status_win, COLOR_PAIR(3) | A_BOLD);
 		pause_game("--- GAME OVER ---", 2);
 	}
 
 	// Set a new highscore
-	if(points > highscore) {
+	if (points > highscore)
+	{
 		highscore = points;
 		// Write highscore to local file
 		write_score_file();
@@ -709,12 +822,14 @@ get_input:
 	refresh();
 
 	// If we are repeating we are jumping to the start of the function
-	if(repeat) {
+	if (repeat)
+	{
 		goto round_start;
 	}
 }
 
-void show_options() {
+void show_options()
+{
 	int i, index = 0;
 	char txt_buf[30];
 
@@ -726,13 +841,13 @@ option_show:
 		"     Borders:",
 		"       Walls:",
 		"Wall-pattern:",
-		"     Back    "
-	};
+		"     Back    "};
 
 	// Print options
-	for(i = 0; i < 4; i++) {
+	for (i = 0; i < 4; i++)
+	{
 		// Highlight the correct entry
-		wattrset(options_win, COLOR_PAIR(i==index ? 7 : 1));
+		wattrset(options_win, COLOR_PAIR(i == index ? 7 : 1));
 		print_offset(options_win, -10, i, options[i]);
 	}
 
@@ -748,35 +863,40 @@ option_show:
 
 	// Wait for input
 	int key = getch();
-	if (key == up_key) {
+	if (key == up_key)
+	{
 		if (index == 0)
 			index = 3;
 		else
 			index--;
-	} else if (key == down_key) {
+	}
+	else if (key == down_key)
+	{
 		index = (index + 1) % 4;
-	} else if (key == '\n') {
+	}
+	else if (key == '\n')
+	{
 		switch (index)
 		{
-			case 0:
-				open_bounds_flag = !open_bounds_flag;
-				break;
-			case 1:
-				wall_flag = !wall_flag;
-				break;
-			case 2:
-				wall_pattern = (wall_pattern + 1) % 6;
-				break;
-			case 3:
-				return;
+		case 0:
+			open_bounds_flag = !open_bounds_flag;
+			break;
+		case 1:
+			wall_flag = !wall_flag;
+			break;
+		case 2:
+			wall_pattern = (wall_pattern + 1) % 6;
+			break;
+		case 3:
+			return;
 		}
 	}
 
 	goto option_show;
-
 }
 
-void show_startscreen() {
+void show_startscreen()
+{
 	int i, index = 0;
 	char txt_buf[40];
 show:
@@ -791,7 +911,8 @@ show:
 
 	// Print logo
 	attrset(COLOR_PAIR(snake_color) | A_BOLD);
-	for(i = 0; i<6; i++) {
+	for (i = 0; i < 6; i++)
+	{
 		print_centered(stdscr, (max_y / 4) + i, LOGO[i]);
 	}
 
@@ -806,13 +927,13 @@ show:
 		"Play Game",
 		"Options",
 		"Credits",
-		"Quit"
-	};
+		"Quit"};
 
 	// Print options
-	for(i = 0; i<4; i++) {
+	for (i = 0; i < 4; i++)
+	{
 		// Highlight correct entry
-		wattrset(options_win, COLOR_PAIR(i==index ? 7 : 1));
+		wattrset(options_win, COLOR_PAIR(i == index ? 7 : 1));
 		print_centered(options_win, i, options[i]);
 	}
 
@@ -823,34 +944,39 @@ show:
 
 	// Wait for input
 	int key = getch();
-	if (key == up_key) {
+	if (key == up_key)
+	{
 		if (index == 0)
 			index = 3;
 		else
 			index--;
-	} else if (key == down_key) {
+	}
+	else if (key == down_key)
+	{
 		index = (index + 1) % 4;
-	} else if (key == '\n') {
+	}
+	else if (key == '\n')
+	{
 		switch (index)
 		{
-			case 0:
-				clear();
-				refresh();
-				play_round();
-				break;
-			case 1:
-				show_options();
-				break;
-			case 2:
-				print_centered(options_win, 0, "Programming by Philipp Hagenlocher");
-				print_centered(options_win, 1, "Please report any bugs you can find on GitHub");
-				print_centered(options_win, 2, "Start with -v to get information on the license");
-				print_centered(options_win, 3, "Press any key!");
-				wrefresh(options_win);
-				getch();
-				break;
-			case 3:
-				clean_exit();
+		case 0:
+			clear();
+			refresh();
+			play_round();
+			break;
+		case 1:
+			show_options();
+			break;
+		case 2:
+			print_centered(options_win, 0, "Programming by Philipp Hagenlocher");
+			print_centered(options_win, 1, "Please report any bugs you can find on GitHub");
+			print_centered(options_win, 2, "Start with -v to get information on the license");
+			print_centered(options_win, 3, "Press any key!");
+			wrefresh(options_win);
+			getch();
+			break;
+		case 3:
+			clean_exit();
 		}
 	}
 
@@ -861,91 +987,97 @@ show:
 	goto show;
 }
 
-void parse_arguments(int argc, char **argv) {
+void parse_arguments(int argc, char **argv)
+{
 	int arg, int_arg, vim_flag, option_index;
 	option_index = 0;
 	vim_flag = FALSE;
 
 	const struct option long_opts[] =
-	{
-		{"help", no_argument, NULL, 'h'},
-		{"version", no_argument, NULL, 'v'},
-		{"remove-savefile", no_argument, NULL, 'r'},
-		{"ignore-savefile", no_argument, NULL, 'i'},
-		{"open-bound", no_argument, NULL, 'o'},
-		{"skip-title", no_argument, NULL, 's'},
-		{"vim", no_argument, &vim_flag, TRUE},
-		{"color", required_argument, NULL, 'c'},
-		{"walls", required_argument, NULL, 'w'},
-		{"filepath", required_argument, NULL, 'f'},
-		{"maximum-speed", required_argument, NULL, 1},
-	};
+		{
+			{"help", no_argument, NULL, 'h'},
+			{"version", no_argument, NULL, 'v'},
+			{"remove-savefile", no_argument, NULL, 'r'},
+			{"ignore-savefile", no_argument, NULL, 'i'},
+			{"open-bound", no_argument, NULL, 'o'},
+			{"skip-title", no_argument, NULL, 's'},
+			{"vim", no_argument, &vim_flag, TRUE},
+			{"color", required_argument, NULL, 'c'},
+			{"walls", required_argument, NULL, 'w'},
+			{"filepath", required_argument, NULL, 'f'},
+			{"maximum-speed", required_argument, NULL, 1},
+		};
 
-	while((arg = getopt_long(argc, argv, "osif:rw:c:hv", long_opts, &option_index)) != -1) {
-		switch (arg) {
-			case 1:
-				int_arg = atoi(optarg);
-				if(in_range(int_arg, 0, 150)) {
-					max_speed = 150 - int_arg;
-					break;
-				}
-				goto help_text;
-			case 'o':
-				open_bounds_flag = TRUE;
+	while ((arg = getopt_long(argc, argv, "osif:rw:c:hv", long_opts, &option_index)) != -1)
+	{
+		switch (arg)
+		{
+		case 1:
+			int_arg = atoi(optarg);
+			if (in_range(int_arg, 0, 150))
+			{
+				max_speed = 150 - int_arg;
 				break;
-			case 's':
-				skip_flag = TRUE;
+			}
+			goto help_text;
+		case 'o':
+			open_bounds_flag = TRUE;
+			break;
+		case 's':
+			skip_flag = TRUE;
+			break;
+		case 'i':
+			ignore_flag = TRUE;
+			break;
+		case 'f':
+			file_path = optarg;
+			custom_flag = TRUE;
+			break;
+		case 'r':
+			remove_flag = TRUE;
+			break;
+		case 'w':
+			int_arg = atoi(optarg);
+			if (in_range(int_arg, 0, 5))
+			{
+				wall_flag = TRUE;
+				wall_pattern = int_arg;
 				break;
-			case 'i':
-				ignore_flag = TRUE;
+			}
+			goto help_text;
+		case 'c':
+			int_arg = atoi(optarg);
+			if (in_range(int_arg, 1, 5))
+			{
+				snake_color = int_arg;
 				break;
-			case 'f':
-				file_path = optarg;
-				custom_flag = TRUE;
-				break;
-			case 'r':
-				remove_flag = TRUE;
-				break;
-			case 'w':
-				int_arg = atoi(optarg);
-				if(in_range(int_arg, 0, 5)) {
-					wall_flag = TRUE;
-					wall_pattern = int_arg;
-					break;
-				}
-				goto help_text;
-			case 'c':
-				int_arg = atoi(optarg);
-				if(in_range(int_arg, 1, 5)) {
-					snake_color = int_arg;
-					break;
-				} // else pass to help information
-			case '?': // Invalid parameter
-				// pass to help information
-			case 'h':
-help_text:
-				printf("Usage: %s [options]\n", argv[0]);
-				printf("Options:\n");
-				printf(" --open-bounds, -o\n\tOuter bounds will let the snake pass through\n");
-				printf(" --walls <0-5>, -w <0-5>\n\tEnable a predefined wall pattern (0 is random!)\n");
-				printf(" --color <1-5>, -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
-				printf(" --skip-title, -s\n\tSkip the title screen\n");
-				printf(" --remove-savefile, -r\n\tRemove the savefile and quit\n");
-				printf(" --ignore-savefile, -i\n\tIgnore savefile (don't read nor write)\n");
-				printf(" --filepath path, -f path\n\tSpecify alternate path savefile\n");
-				printf(" --vim\n\tUse vim-style direction controls (H,J,K,L)\n");
-				printf(" --maximum-speed <0,150>\n\tSpecify a new maximum speed (default: 100)\n");
-				printf(" --help, -h\n\tDisplay this information\n");
-				printf(" --version, -v\n\tDisplay version and license information\n\n");
-				printf("Ingame Controls:\n");
-				printf(" Arrow-Keys\n\tDirection to go\n");
-				printf(" Enter\n\tPause\n");
-				printf(" Shift+Q\n\tEnd Round\n");
-				printf(" Shift+R\n\tRestart Round (can be used to resize the game after windowsize has changed)\n");
-				exit(0);
-			case 'v':
-				printf("C-Snake %s\nCopyright (c) 2015-2022 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
-				exit(0);
+			}	  // else pass to help information
+		case '?': // Invalid parameter
+				  // pass to help information
+		case 'h':
+		help_text:
+			printf("Usage: %s [options]\n", argv[0]);
+			printf("Options:\n");
+			printf(" --open-bounds, -o\n\tOuter bounds will let the snake pass through\n");
+			printf(" --walls <0-5>, -w <0-5>\n\tEnable a predefined wall pattern (0 is random!)\n");
+			printf(" --color <1-5>, -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
+			printf(" --skip-title, -s\n\tSkip the title screen\n");
+			printf(" --remove-savefile, -r\n\tRemove the savefile and quit\n");
+			printf(" --ignore-savefile, -i\n\tIgnore savefile (don't read nor write)\n");
+			printf(" --filepath path, -f path\n\tSpecify alternate path savefile\n");
+			printf(" --vim\n\tUse vim-style direction controls (H,J,K,L)\n");
+			printf(" --maximum-speed <0,150>\n\tSpecify a new maximum speed (default: 100)\n");
+			printf(" --help, -h\n\tDisplay this information\n");
+			printf(" --version, -v\n\tDisplay version and license information\n\n");
+			printf("Ingame Controls:\n");
+			printf(" Arrow-Keys\n\tDirection to go\n");
+			printf(" Enter\n\tPause\n");
+			printf(" Shift+Q\n\tEnd Round\n");
+			printf(" Shift+R\n\tRestart Round (can be used to resize the game after windowsize has changed)\n");
+			exit(0);
+		case 'v':
+			printf("C-Snake %s\nCopyright (c) 2015-2022 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
+			exit(0);
 		}
 	}
 
@@ -956,7 +1088,8 @@ help_text:
 	right_key = vim_flag ? 'l' : KEY_RIGHT;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
 	// Parse arguments
 	parse_arguments(argc, argv);
 
@@ -964,12 +1097,16 @@ int main(int argc, char **argv) {
 	srand(time(NULL));
 
 	// Init path for score file
-	if(init_file_path() == 1) {
+	if (init_file_path() == 1)
+	{
 		// If the remove flag has been set we remove the file and exit
-		if(remove_flag) {
+		if (remove_flag)
+		{
 			remove(file_path);
 			exit(0);
-		} else {
+		}
+		else
+		{
 			// Read local highscore
 			read_score_file();
 		}
@@ -979,20 +1116,21 @@ int main(int argc, char **argv) {
 	initscr();
 	start_color();
 	short background = COLOR_BLACK;
-	if(use_default_colors() != ERR) {
+	if (use_default_colors() != ERR)
+	{
 		background = -1;
 	}
-	init_pair(1, COLOR_WHITE,  background);
-	init_pair(2, COLOR_GREEN,  background);
-	init_pair(3, COLOR_RED,    background);
+	init_pair(1, COLOR_WHITE, background);
+	init_pair(2, COLOR_GREEN, background);
+	init_pair(3, COLOR_RED, background);
 	init_pair(4, COLOR_YELLOW, background);
-	init_pair(5, COLOR_BLUE,   background);
-	init_pair(6, COLOR_BLACK,  COLOR_GREEN);
-	init_pair(7, COLOR_BLACK,  COLOR_RED);
-	init_pair(8, COLOR_BLACK,  COLOR_YELLOW);
-	init_pair(9, COLOR_BLACK,  COLOR_BLUE);
-  	bkgd(COLOR_PAIR(1));
-  	curs_set(FALSE);
+	init_pair(5, COLOR_BLUE, background);
+	init_pair(6, COLOR_BLACK, COLOR_GREEN);
+	init_pair(7, COLOR_BLACK, COLOR_RED);
+	init_pair(8, COLOR_BLACK, COLOR_YELLOW);
+	init_pair(9, COLOR_BLACK, COLOR_BLUE);
+	bkgd(COLOR_PAIR(1));
+	curs_set(FALSE);
 	noecho();
 	cbreak();
 	keypad(stdscr, TRUE);
@@ -1004,16 +1142,21 @@ int main(int argc, char **argv) {
 	// and the titlescreen will most likely not work, so it is skipped.
 	// If the height is smaller than 19, the version cannot be displayed
 	// correctly so we have to skip the title.
-	if((max_x < 64) || (max_y < 19)) {
+	if ((max_x < 64) || (max_y < 19))
+	{
 		skip_flag = TRUE;
 	}
 
 	// Endless loop until the user quits the game
-	while(TRUE) {
-		if(skip_flag) {
+	while (TRUE)
+	{
+		if (skip_flag)
+		{
 			play_round();
-		} else {
-  			show_startscreen();
-  		}
-  	}
+		}
+		else
+		{
+			show_startscreen();
+		}
+	}
 }
