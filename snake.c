@@ -20,8 +20,10 @@
 #define MIN_POINTS 100
 #define STD_MAX_SPEED 50
 #define GROW_FACTOR 10
+#define SUPERFOOD_GROW_FACTOR 15
 #define SPEED_FACTOR 2
-#define VERSION "0.56.1 (Beta)"
+#define GRACE_FRAMES 3
+#define VERSION "0.57.0 (Beta)"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 	// 19 characters are needed to display the max number for long long
 
@@ -132,12 +134,12 @@ void read_score_file() {
 	FILE *file = fopen(file_path, "r");
 
 	// Something went wrong
-	// TODO: Have error handling 
+	// TODO: Have error handling
 	if(file == NULL) {
 		highscore = 0;
 		return;
 	}
-	
+
 	// Read file contents and interpret the score
 	if(fgets(content, FILE_LENGTH, file) == NULL)
 		highscore = 0;
@@ -186,7 +188,7 @@ void print_status(int length, int points_counter) {
 	box(status_win, 0, 0);
 
 	// Set bold font
-	wattrset(status_win, A_BOLD);	
+	wattrset(status_win, A_BOLD);
 
 	if(max_x > 50) {
 		// Print score
@@ -196,11 +198,11 @@ void print_status(int length, int points_counter) {
 		// Print highscore
 		sprintf(txt_buf, "Highscore: %lld", highscore);
 		mvwaddstr(status_win, 1, (2*max_x/3) - half_len(txt_buf), txt_buf);
-		
+
 		// Print points counter
 		sprintf(txt_buf, "Bonus: %d", points_counter);
 		mvwaddstr(status_win, 2, (max_x/3) - half_len(txt_buf), txt_buf);
-		
+
 		// Print length
 		sprintf(txt_buf, "Length: %d", length);
 		mvwaddstr(status_win, 2, (2*max_x/3) - half_len(txt_buf), txt_buf);
@@ -213,7 +215,7 @@ void print_status(int length, int points_counter) {
 		sprintf(txt_buf, "Bonus: %d", points_counter);
 		mvwaddstr(status_win, 2, (max_x/2) - half_len(txt_buf), txt_buf);
 	}
-	
+
 	// Refresh window
 	wrefresh(status_win);
 }
@@ -274,7 +276,7 @@ void new_random_coordinates(linked_cell_t *snake, linked_cell_t *wall, int *x, i
 		// Generate random coordinates
 		*x = rand() % max_x;
 		*y = rand() % max_y;
-		
+
 		// Check if the coordinates are on the snake or wall
 		// If so, generate new values
 	} while(is_on_obstacle(snake, *x, *y) || is_on_obstacle(wall, *x, *y));
@@ -391,14 +393,16 @@ round_start:
 	int key = 0;
 
 	// Init gameplay variables
-	int x, y, points_counter, lost, repeat, length, growing;
-	x = max_x / 2;
-	y = max_y / 2;
+	int x, y, old_x, old_y;
+	int points_counter, lost, repeat, length, growing, grace_frames;
+	x = old_x = max_x / 2;
+	y = old_y = max_y / 2;
 	points_counter = POINTS_COUNTER_VALUE;
 	lost = TRUE;
 	repeat = FALSE;
 	length = 1;
 	growing = STARTING_LENGTH - 1;
+	grace_frames = GRACE_FRAMES;
 
 	// Init food variables
 	int superfood_counter, food_x, food_y;
@@ -491,11 +495,11 @@ round_start:
 		mvwaddch(game_win, food_y, food_x, '0');
 		wattrset(game_win, COLOR_PAIR(snake_color) | A_BOLD);
 		mvwaddch(game_win, y, x, 'X');
-		
+
 		// Refresh game window
 		wrefresh(game_win);
 
-get_input: 
+get_input:
 		// Getting input
 		key = getch();
 
@@ -530,6 +534,10 @@ get_input:
 			// If the snake is not moving, there is no update to be made
 			goto get_input;
 		}
+
+		// Save old coordinates
+		old_x = x;
+		old_y = y;
 
 		// Change x and y according to the direction and paint the fitting
 		// character on the coordinate BEFORE changing the coordinate
@@ -594,8 +602,25 @@ get_input:
 			}
 		}
 
-		// Draw head and create new cell for the head
-		mvwaddch(game_win, y, x, 'X');
+		// The snake hits something
+		if(is_on_obstacle(head, x, y) || is_on_obstacle(wall, x, y)) {
+			if(grace_frames == 0) {
+				// No grace frames left, game over
+				break;
+			} else {
+				// We still have grace frames so we reset the coordinate and
+				// let the player change the direction
+				grace_frames--;
+				x = old_x;
+				y = old_y;
+				goto get_input;
+			}
+		}
+
+		// Reset grace frames
+		grace_frames = GRACE_FRAMES;
+
+		// Add new head to snake but don't draw it since it might hit something
 		linked_cell_t *new_cell = malloc(sizeof(linked_cell_t));
 		new_cell->x = x;
 		new_cell->y = y;
@@ -603,20 +628,13 @@ get_input:
 		head->next = new_cell;
 		head = new_cell;
 
-		// The snake hits itself and dies
-		if(is_on_obstacle(head->last, x, y)) {
-			break;
-		}
-
-		// The snake hits a wall and dies
-		if(is_on_obstacle(wall, x, y)) {
-			break;
-		}
+		// Draw head
+		mvwaddch(game_win, y, x, 'X');
 
 		// Head hits the food
 		if((x == food_x) && (y == food_y)) {
 			// Let the snake grow and change the speed
-			growing += GROW_FACTOR;
+			growing += superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
 			if(speed > max_speed) {
 				speed -= SPEED_FACTOR;
 			}
@@ -655,7 +673,7 @@ get_input:
 
 		// Update status window
 		print_status(length, points_counter);
-		
+
 		// Refresh game window
 		wrefresh(game_win);
 	}
@@ -731,14 +749,14 @@ option_show:
 	// Wait for input
 	int key = getch();
 	if (key == up_key) {
-		if (index == 0) 
+		if (index == 0)
 			index = 3;
 		else
 			index--;
 	} else if (key == down_key) {
 		index = (index + 1) % 4;
 	} else if (key == '\n') {
-		switch (index) 
+		switch (index)
 		{
 			case 0:
 				open_bounds_flag = !open_bounds_flag;
@@ -766,7 +784,7 @@ show:
 	getmaxyx(stdscr, max_y, max_x);
 
 	// Set getch to blocking mode
-	timeout(-1); 
+	timeout(-1);
 
 	// Clear the whole screen
 	clear();
@@ -789,7 +807,7 @@ show:
 		"Options",
 		"Credits",
 		"Quit"
-	}; 
+	};
 
 	// Print options
 	for(i = 0; i<4; i++) {
@@ -806,14 +824,14 @@ show:
 	// Wait for input
 	int key = getch();
 	if (key == up_key) {
-		if (index == 0) 
+		if (index == 0)
 			index = 3;
 		else
 			index--;
 	} else if (key == down_key) {
 		index = (index + 1) % 4;
 	} else if (key == '\n') {
-		switch (index) 
+		switch (index)
 		{
 			case 0:
 				clear();
@@ -838,7 +856,7 @@ show:
 
 	// Delete options window
 	delwin(options_win);
-	
+
 	// Go back to the beginning
 	goto show;
 }
