@@ -12,7 +12,7 @@
 // Misc. macros
 #define in_range(x, min, max) (x >= min) && (x <= max)
 
-// Constants important for gamplay
+// Constants important for gameplay
 #define STARTING_SPEED 150
 #define STARTING_LENGTH 5
 #define POINTS_COUNTER_VALUE 1000
@@ -74,7 +74,7 @@ static const char *LOGO[] = {
 	"Y8.   .88          d8'   .8P 88    88 88.  .88 88  `8b. 88.  ...",
 	" Y88888P'           Y88888P  dP    dP `88888P8 dP   `YP `88888P'"};
 
-int init_file_path()
+int init_file_path(void)
 {
 	// The path has been set somehow, so we don't overwrite it
 	// This is an error
@@ -108,7 +108,7 @@ int init_file_path()
 	return 1;
 }
 
-void write_score_file()
+void write_score_file(void)
 {
 	// If we ignore the score file we return
 	if (ignore_flag)
@@ -133,7 +133,7 @@ void write_score_file()
 	fclose(file);
 }
 
-void read_score_file()
+void read_score_file(void)
 {
 	// If we ignore the score file we return
 	if (ignore_flag)
@@ -163,7 +163,7 @@ void read_score_file()
 	fclose(file);
 }
 
-void clean_exit()
+void clean_exit(void)
 {
 	// Write highscore to file
 	write_score_file();
@@ -411,7 +411,7 @@ void free_linked_list(linked_cell_t *cell)
 	} while (cell != NULL);
 }
 
-void play_round()
+void play_round(void)
 {
 round_start:
 	// Init max coordinates
@@ -828,7 +828,7 @@ round_start:
 	}
 }
 
-void show_options()
+void show_options(void)
 {
 	int i, index = 0;
 	char txt_buf[30];
@@ -854,7 +854,7 @@ option_show:
 	// Print values for options
 	wattrset(options_win, COLOR_PAIR(1));
 	print_offset(options_win, 10, 0, open_bounds_flag ? "Open" : "Closed");
-	print_offset(options_win, 10, 1, wall_flag ? "Active" : "Deactive");
+	print_offset(options_win, 10, 1, wall_flag ? "Enabled" : "Disabled");
 	sprintf(txt_buf, "%d", wall_pattern);
 	print_offset(options_win, 10, 2, txt_buf);
 
@@ -895,7 +895,7 @@ option_show:
 	goto option_show;
 }
 
-void show_startscreen()
+void show_startscreen(void)
 {
 	int i, index = 0;
 	char txt_buf[40];
@@ -1069,14 +1069,14 @@ void parse_arguments(int argc, char **argv)
 			printf(" --maximum-speed <0,150>\n\tSpecify a new maximum speed (default: 100)\n");
 			printf(" --help, -h\n\tDisplay this information\n");
 			printf(" --version, -v\n\tDisplay version and license information\n\n");
-			printf("Ingame Controls:\n");
+			printf("In-game Controls:\n");
 			printf(" Arrow-Keys\n\tDirection to go\n");
 			printf(" Enter\n\tPause\n");
 			printf(" Shift+Q\n\tEnd Round\n");
-			printf(" Shift+R\n\tRestart Round (can be used to resize the game after windowsize has changed)\n");
+			printf(" Shift+R\n\tRestart Round (can be used to resize the game after window size has changed)\n");
 			exit(0);
 		case 'v':
-			printf("C-Snake %s\nCopyright (c) 2015-2022 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
+			printf("C-Snake %s\nCopyright (c) 2015-2023 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
 			exit(0);
 		}
 	}
