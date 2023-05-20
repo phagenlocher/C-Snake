@@ -23,7 +23,7 @@
 #define SUPERFOOD_GROW_FACTOR 15
 #define SPEED_FACTOR 2
 #define GRACE_FRAMES 3
-#define VERSION "0.57.0 (Beta)"
+#define VERSION "0.57.1 (Beta)"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 // 19 characters are needed to display the max number for long long
 
@@ -436,7 +436,7 @@ round_start:
 
 	// Init gameplay variables
 	int x, y, old_x, old_y;
-	int points_counter, lost, repeat, length, growing, grace_frames;
+	int points_counter, lost, repeat, length, growing, grace_frames, wall_hit;
 	x = old_x = max_x / 2;
 	y = old_y = max_y / 2;
 	points_counter = POINTS_COUNTER_VALUE;
@@ -445,6 +445,7 @@ round_start:
 	length = 1;
 	growing = STARTING_LENGTH - 1;
 	grace_frames = GRACE_FRAMES;
+	wall_hit = FALSE;
 
 	// Init food variables
 	int superfood_counter, food_x, food_y;
@@ -670,6 +671,7 @@ round_start:
 			x++;
 		}
 
+		wall_hit = FALSE;
 		if (open_bounds_flag)
 		{
 			// If you hit the outer bounds you'll end up on the other side
@@ -693,18 +695,11 @@ round_start:
 		else
 		{
 			// If the bounds aren't open you will loose
-			if ((y < 0) || (x < 0))
-			{
-				break;
-			}
-			if ((y >= max_y) || (x >= max_x))
-			{
-				break;
-			}
+			wall_hit = (y < 0) || (x < 0) || (y >= max_y) || (x >= max_x);
 		}
 
 		// The snake hits something
-		if (is_on_obstacle(head, x, y) || is_on_obstacle(wall, x, y))
+		if (wall_hit || is_on_obstacle(head, x, y) || is_on_obstacle(wall, x, y))
 		{
 			if (grace_frames == 0)
 			{
