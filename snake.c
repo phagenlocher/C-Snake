@@ -7,9 +7,8 @@
 #include <time.h>
 #include <pwd.h>
 
-// Direction macros
+// Macros
 #define is_horizontal(direction) ((direction == LEFT) || (direction == RIGHT))
-// Misc. macros
 #define in_range(x, min, max) (x >= min) && (x <= max)
 
 // Constants important for gameplay
@@ -36,6 +35,15 @@ typedef enum Direction
 	LEFT
 } Direction;
 
+typedef enum UserInteraction
+{
+	NONE,
+	PAUSE,
+	RESTART,
+	QUIT,
+	DIRECTION
+} UserInteraction;
+
 typedef struct linked_cell_t
 {
 	int x;
@@ -47,6 +55,8 @@ typedef struct linked_cell_t
 typedef struct game_state_t
 {
 	long long points;
+	Direction direction;
+	Direction old_direction;
 	int speed;
 	int x;
 	int y;
@@ -56,6 +66,9 @@ typedef struct game_state_t
 	int length;
 	int growing;
 	int grace_frames;
+	int superfood_counter;
+	int food_x;
+	int food_y;
 } game_state_t;
 
 typedef struct game_result_t
@@ -484,23 +497,24 @@ int snake_char_from_direction(Direction direction, Direction old_direction)
 	// TODO crash
 }
 
-int update_position(game_state_t *state, Direction direction, int max_x, int max_y)
+int update_position(game_state_t *state, int max_x, int max_y)
 {
-	if (direction == UP)
+	switch (state->direction)
 	{
+	case UP:
 		state->y--;
-	}
-	else if (direction == DOWN)
-	{
+		break;
+	case DOWN:
 		state->y++;
-	}
-	else if (direction == LEFT)
-	{
+		break;
+	case LEFT:
 		state->x--;
-	}
-	else if (direction == RIGHT)
-	{
+		break;
+	case RIGHT:
 		state->x++;
+		break;
+	default:
+		break;
 	}
 
 	if (open_bounds_flag)
@@ -527,6 +541,51 @@ int update_position(game_state_t *state, Direction direction, int max_x, int max
 	{
 		return (state->y < 0) || (state->x < 0) || (state->y >= max_y) || (state->x >= max_x);
 	}
+}
+
+UserInteraction handle_input(game_state_t *state)
+{
+	// Getting input
+	int key = getch();
+
+	// Changing direction according to the input
+	if (key == left_key)
+	{
+		if (state->direction != RIGHT)
+			state->direction = LEFT;
+		return DIRECTION;
+	}
+	else if (key == right_key)
+	{
+		if (state->direction != LEFT)
+			state->direction = RIGHT;
+		return DIRECTION;
+	}
+	else if (key == up_key)
+	{
+		if (state->direction != DOWN)
+			state->direction = UP;
+		return DIRECTION;
+	}
+	else if (key == down_key)
+	{
+		if (state->direction != UP)
+			state->direction = DOWN;
+		return DIRECTION;
+	}
+	else if (key == '\n') // Enter-key
+	{
+		return PAUSE;
+	}
+	else if (key == 'R')
+	{
+		return RESTART;
+	}
+	else if (key == 'Q')
+	{
+		return QUIT;
+	}
+	return NONE;
 }
 
 game_result_t play_round(void)
@@ -557,6 +616,11 @@ game_result_t play_round(void)
 	state.length = STARTING_LENGTH;
 	state.growing = GROW_FACTOR;
 	state.grace_frames = GRACE_FRAMES;
+	state.direction = HOLD;
+	state.old_direction = HOLD;
+	state.superfood_counter = SUPERFOOD_COUNTER_VALUE;
+	state.food_x = 0;
+	state.food_y = 0;
 
 	// Init result
 	game_result_t result;
@@ -566,18 +630,6 @@ game_result_t play_round(void)
 
 	// Set initial timeout
 	timeout(state.speed); // The timeout for getch() makes up the game speed
-
-	// Init key
-	int key = 0;
-
-	// Init food variables
-	int superfood_counter, food_x, food_y;
-	superfood_counter = SUPERFOOD_COUNTER_VALUE;
-	food_x = food_y = 0;
-
-	// Init direction variables
-	Direction direction, old_direction;
-	direction = old_direction = HOLD;
 
 	// Print status window since points have been set to 0
 	print_status(status_win, &state);
@@ -669,73 +721,40 @@ game_result_t play_round(void)
 	}
 
 	// Init food coordinates
-	new_random_coordinates(head, wall, &food_x, &food_y, max_x, max_y);
+	new_random_coordinates(head, wall, &state.food_x, &state.food_y, max_x, max_y);
 
 	// Game-Loop
 	while (TRUE)
 	{
-
 		// Painting the food and the snakes head
-		wattrset(game_win, COLOR_PAIR((superfood_counter == 0) ? 4 : 3) | A_BOLD);
-		mvwaddch(game_win, food_y, food_x, '0');
+		wattrset(game_win, COLOR_PAIR((state.superfood_counter == 0) ? 4 : 3) | A_BOLD);
+		mvwaddch(game_win, state.food_y, state.food_x, '0');
 		wattrset(game_win, COLOR_PAIR(snake_color) | A_BOLD);
 		mvwaddch(game_win, state.y, state.x, 'X');
 
 		// Refresh game window
 		wrefresh(game_win);
 
-	get_input:
-		// Getting input
-		key = getch();
-
-		// Changing direction according to the input
-		if (key == left_key)
+		// Get input
+		switch (handle_input(&state))
 		{
-			if (direction != RIGHT)
-				direction = LEFT;
-		}
-		else if (key == right_key)
-		{
-			if (direction != LEFT)
-				direction = RIGHT;
-		}
-		else if (key == up_key)
-		{
-			if (direction != DOWN)
-				direction = UP;
-		}
-		else if (key == down_key)
-		{
-			if (direction != UP)
-				direction = DOWN;
-		}
-		else if ((key == '\n') && (direction != HOLD))
-		{ // Enter-key
+		case NONE:
+			continue;
+		case PAUSE:
 			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
 			pause_game(status_win, "--- PAUSED ---", 0);
-			// Reset speed after indefinite pause
-			timeout(state.speed);
-		}
-		else if (key == 'R')
-		{
+			break;
+		case RESTART:
 			result.should_repeat = TRUE;
+			return result; // TODO Teardown
+		case QUIT:
+			return result; // TODO Teardown
+		default:
 			break;
 		}
-		else if (key == 'Q')
-		{
-			// If the title screen is disabled we will exit the programm
-			if (skip_flag)
-			{
-				clean_exit();
-			}
-			result.points = state.points;
-			break;
-		}
-		else if (direction == HOLD)
-		{
-			// If the snake is not moving, there is no update to be made
-			goto get_input;
-		}
+
+		// Set timeout
+		timeout(state.speed);
 
 		// Save old coordinates
 		state.old_x = state.x;
@@ -745,10 +764,11 @@ game_result_t play_round(void)
 		// character on the coordinate BEFORE changing the coordinate
 		// Paint the snake in the specified color
 		wattrset(game_win, COLOR_PAIR(snake_color) | A_BOLD);
-		mvwaddch(game_win, state.y, state.x, snake_char_from_direction(direction, old_direction));
+		int snake_char = snake_char_from_direction(state.direction, state.old_direction);
+		mvwaddch(game_win, state.y, state.x, snake_char);
 
 		// Update position and check if outer bounds were hit
-		int wall_hit = update_position(&state, direction, max_x, max_y);
+		int wall_hit = update_position(&state, max_x, max_y);
 
 		// The snake hits something
 		if (wall_hit || is_on_obstacle(head, state.x, state.y) || is_on_obstacle(wall, state.x, state.y))
@@ -768,7 +788,7 @@ game_result_t play_round(void)
 				state.grace_frames--;
 				state.x = state.old_x;
 				state.y = state.old_y;
-				goto get_input;
+				continue;
 			}
 		}
 
@@ -787,19 +807,19 @@ game_result_t play_round(void)
 		mvwaddch(game_win, state.y, state.x, 'X');
 
 		// Head hits the food
-		if ((state.x == food_x) && (state.y == food_y))
+		if ((state.x == state.food_x) && (state.y == state.food_y))
 		{
 			// Let the snake grow and change the speed
-			state.growing += superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
+			state.growing += state.superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
 			if (state.speed > max_speed)
 			{
 				state.speed -= SPEED_FACTOR;
 			}
-			state.points += (state.points_counter + state.length + (STARTING_SPEED - state.speed) * 5) * (superfood_counter == 0 ? 5 : 1);
+			state.points += (state.points_counter + state.length + (STARTING_SPEED - state.speed) * 5) * (state.superfood_counter == 0 ? 5 : 1);
 			state.points_counter = POINTS_COUNTER_VALUE;
 			timeout(state.speed);
-			superfood_counter = (superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : superfood_counter - 1;
-			new_random_coordinates(head, wall, &food_x, &food_y, max_x, max_y);
+			state.superfood_counter = (state.superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : state.superfood_counter - 1;
+			new_random_coordinates(head, wall, &state.food_x, &state.food_y, max_x, max_y);
 		}
 
 		// If the snake is not growing...
@@ -824,7 +844,7 @@ game_result_t play_round(void)
 		}
 
 		// The old direction is the direction we had this round.
-		old_direction = direction;
+		state.old_direction = state.direction;
 
 		// Decrement the points that will be added
 		if (state.points_counter > MIN_POINTS)
