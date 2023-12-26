@@ -51,15 +51,15 @@ typedef enum UpdateResult
 	CONTINUE
 } UpdateResult;
 
-typedef struct linked_cell_t
+typedef struct LinkedCell
 {
 	int x;
 	int y;
-	struct linked_cell_t *last;
-	struct linked_cell_t *next;
-} linked_cell_t;
+	struct LinkedCell *last;
+	struct LinkedCell *next;
+} LinkedCell;
 
-typedef struct game_state_t
+typedef struct GameState
 {
 	long long points;
 	Direction direction;
@@ -76,17 +76,17 @@ typedef struct game_state_t
 	int superfood_counter;
 	int food_x;
 	int food_y;
-	linked_cell_t *head;
-	linked_cell_t *last;
-	linked_cell_t *wall;
-} game_state_t;
+	LinkedCell *head;
+	LinkedCell *last;
+	LinkedCell *wall;
+} GameState;
 
-typedef struct game_result_t
+typedef struct GameResult
 {
 	long long points;
 	int lost;
 	int should_repeat;
-} game_result_t;
+} GameResult;
 
 // Globals
 static char *file_path = NULL;
@@ -229,7 +229,7 @@ void print_offset(WINDOW *window, int x_offset, int y, const char string[])
 	mvwaddstr(window, y, x + x_offset, string);
 }
 
-void print_status(WINDOW *status_win, game_state_t *state)
+void print_status(WINDOW *status_win, GameState *state)
 {
 	char txt_buf[50];
 	int max_x = getmaxx(status_win);
@@ -318,7 +318,7 @@ void pause_game(WINDOW *status_win, const char string[], const int seconds)
 	wrefresh(status_win);
 }
 
-int is_on_obstacle(linked_cell_t *test_cell, const int x, const int y)
+int is_on_obstacle(LinkedCell *test_cell, const int x, const int y)
 {
 	// Not a valid cell to test
 	if (test_cell == NULL)
@@ -339,8 +339,8 @@ int is_on_obstacle(linked_cell_t *test_cell, const int x, const int y)
 }
 
 void new_random_coordinates(
-	linked_cell_t *snake,
-	linked_cell_t *wall,
+	LinkedCell *snake,
+	LinkedCell *wall,
 	int *x,
 	int *y,
 	int max_x,
@@ -357,10 +357,10 @@ void new_random_coordinates(
 	} while (is_on_obstacle(snake, *x, *y) || is_on_obstacle(wall, *x, *y));
 }
 
-linked_cell_t *create_wall(int start, int end, int constant, Direction dir, linked_cell_t *last_cell)
+LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedCell *last_cell)
 {
 	int i;
-	linked_cell_t *new_wall, *wall = malloc(sizeof(linked_cell_t));
+	LinkedCell *new_wall, *wall = malloc(sizeof(LinkedCell));
 
 	// Based on the direction set either x or y to a constant value
 	if (is_horizontal(dir))
@@ -385,7 +385,7 @@ linked_cell_t *create_wall(int start, int end, int constant, Direction dir, link
 	case UP:
 		for (i = start - 1; i > end; i--)
 		{
-			new_wall = malloc(sizeof(linked_cell_t));
+			new_wall = malloc(sizeof(LinkedCell));
 			new_wall->x = constant;
 			new_wall->y = i;
 			new_wall->last = wall;
@@ -395,7 +395,7 @@ linked_cell_t *create_wall(int start, int end, int constant, Direction dir, link
 	case DOWN:
 		for (i = start + 1; i < end; i++)
 		{
-			new_wall = malloc(sizeof(linked_cell_t));
+			new_wall = malloc(sizeof(LinkedCell));
 			new_wall->x = constant;
 			new_wall->y = i;
 			new_wall->last = wall;
@@ -405,7 +405,7 @@ linked_cell_t *create_wall(int start, int end, int constant, Direction dir, link
 	case LEFT:
 		for (i = start - 1; i > end; i--)
 		{
-			new_wall = malloc(sizeof(linked_cell_t));
+			new_wall = malloc(sizeof(LinkedCell));
 			new_wall->x = i;
 			new_wall->y = constant;
 			new_wall->last = wall;
@@ -415,7 +415,7 @@ linked_cell_t *create_wall(int start, int end, int constant, Direction dir, link
 	case RIGHT:
 		for (i = start + 1; i < end; i++)
 		{
-			new_wall = malloc(sizeof(linked_cell_t));
+			new_wall = malloc(sizeof(LinkedCell));
 			new_wall->x = i;
 			new_wall->y = constant;
 			new_wall->last = wall;
@@ -429,14 +429,14 @@ linked_cell_t *create_wall(int start, int end, int constant, Direction dir, link
 	return wall;
 }
 
-void free_linked_list(linked_cell_t *cell)
+void free_linked_list(LinkedCell *cell)
 {
 	// Nothing valid to free
 	if (cell == NULL)
 		return;
 
 	// Free list
-	linked_cell_t *tmp_cell;
+	LinkedCell *tmp_cell;
 	do
 	{
 		tmp_cell = cell->last;
@@ -510,7 +510,7 @@ int snake_char_from_direction(Direction direction, Direction old_direction)
 	return 0;
 }
 
-int update_position(game_state_t *state, int max_x, int max_y)
+int update_position(GameState *state, int max_x, int max_y)
 {
 	switch (state->direction)
 	{
@@ -559,7 +559,7 @@ int update_position(game_state_t *state, int max_x, int max_y)
 	}
 }
 
-UserInteraction handle_input(game_state_t *state)
+UserInteraction handle_input(GameState *state)
 {
 	// Set timeout
 	timeout(state->speed);
@@ -610,7 +610,7 @@ UserInteraction handle_input(game_state_t *state)
 	return NONE;
 }
 
-void paint_objects(WINDOW *game_win, game_state_t *state)
+void paint_objects(WINDOW *game_win, GameState *state)
 {
 	// Clear last cell
 	wattrset(game_win, A_NORMAL);
@@ -629,7 +629,7 @@ void paint_objects(WINDOW *game_win, game_state_t *state)
 	mvwaddch(game_win, state->y, state->x, 'X');
 }
 
-UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, game_state_t *state)
+UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state)
 {
 	// Init max coordinates in relation to game window
 	int max_x = getmaxx(game_win);
@@ -665,7 +665,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, game_state_t *st
 	state->grace_frames = GRACE_FRAMES;
 
 	// Add new head to snake
-	linked_cell_t *new_cell = malloc(sizeof(linked_cell_t));
+	LinkedCell *new_cell = malloc(sizeof(LinkedCell));
 	new_cell->x = state->x;
 	new_cell->y = state->y;
 	new_cell->last = state->head;
@@ -691,7 +691,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, game_state_t *st
 	if (state->growing == 0)
 	{
 		// ...free the memory for this cell
-		linked_cell_t *new_last;
+		LinkedCell *new_last;
 		state->last->next->last = NULL;
 		new_last = state->last->next;
 		free(state->last);
@@ -714,10 +714,10 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, game_state_t *st
 	return CONTINUE;
 }
 
-game_state_t init_state(int max_x, int max_y)
+GameState init_state(int max_x, int max_y)
 {
 	// Init gamestate
-	game_state_t state;
+	GameState state;
 	state.points = 0;
 	state.speed = STARTING_SPEED;
 	state.x = max_x / 2;
@@ -735,7 +735,7 @@ game_state_t init_state(int max_x, int max_y)
 	state.food_y = 0;
 
 	// Create first cell for the snake
-	linked_cell_t *head = malloc(sizeof(linked_cell_t));
+	LinkedCell *head = malloc(sizeof(LinkedCell));
 	head->x = state.x;
 	head->y = state.y;
 	head->last = NULL;
@@ -744,7 +744,7 @@ game_state_t init_state(int max_x, int max_y)
 	state.last = head;
 
 	// Creating walls (all walls are referenced by one pointer)
-	linked_cell_t *wall = NULL;
+	LinkedCell *wall = NULL;
 	int bigger, smaller, constant;
 	if (wall_flag)
 	{
@@ -811,7 +811,7 @@ game_state_t init_state(int max_x, int max_y)
 	return state;
 }
 
-game_result_t play_round(void)
+GameResult play_round(void)
 {
 	// Init max coordinates
 	int global_max_x = getmaxx(stdscr);
@@ -828,10 +828,10 @@ game_result_t play_round(void)
 	int max_y = getmaxy(game_win);
 
 	// Init gamestate
-	game_state_t state = init_state(max_x, max_y);
+	GameState state = init_state(max_x, max_y);
 
 	// Init result
-	game_result_t result;
+	GameResult result;
 	result.points = 0;
 	result.lost = FALSE;
 	result.should_repeat = FALSE;
@@ -846,7 +846,7 @@ game_result_t play_round(void)
 	{
 		// Paint the wall
 		// It should never be overwritten, since it will not be redrawn
-		linked_cell_t *tmp_cell1, *tmp_cell2;
+		LinkedCell *tmp_cell1, *tmp_cell2;
 		tmp_cell2 = state.wall;
 		wattrset(game_win, COLOR_PAIR(5) | A_BOLD);
 		do
