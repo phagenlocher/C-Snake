@@ -235,7 +235,7 @@ void print_status(WINDOW *status_win, GameState *state)
 	int max_x = getmaxx(status_win);
 
 	// Set normal
-	wattrset(status_win, A_NORMAL);
+	wattrset(status_win, A_BOLD);
 
 	// Deleting rows
 	wmove(status_win, 1, 0);
@@ -311,7 +311,7 @@ void pause_game(WINDOW *status_win, const char string[], const int seconds)
 	wclear(status_win);
 
 	// Redrawing the box
-	wattrset(status_win, A_NORMAL);
+	wattrset(status_win, A_BOLD);
 	box(status_win, 0, 0);
 
 	// Refreshing the window
@@ -817,11 +817,9 @@ GameResult play_round(void)
 	int global_max_x = getmaxx(stdscr);
 	int global_max_y = getmaxy(stdscr);
 
-	// Create subwindows and their coordinates
+	// Create subwindows
 	WINDOW *game_win = subwin(stdscr, global_max_y - 4, global_max_x, 0, 0);
 	WINDOW *status_win = subwin(stdscr, 4, global_max_x, global_max_y - 4, 0);
-	wattrset(status_win, A_NORMAL);
-	box(status_win, 0, 0);
 
 	// Init max coordinates in relation to game window
 	int max_x = getmaxx(game_win);
@@ -878,6 +876,7 @@ GameResult play_round(void)
 		{
 			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
 			pause_game(status_win, "--- PAUSED ---", 0);
+			continue;
 		}
 		else if (interact == RESTART)
 		{
