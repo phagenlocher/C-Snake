@@ -44,6 +44,13 @@ typedef enum UserInteraction
 	DIRECTION
 } UserInteraction;
 
+typedef enum UpdateResult
+{
+	GRACE,
+	GAME_OVER,
+	CONTINUE
+} UpdateResult;
+
 typedef struct linked_cell_t
 {
 	int x;
@@ -69,6 +76,9 @@ typedef struct game_state_t
 	int superfood_counter;
 	int food_x;
 	int food_y;
+	linked_cell_t *head;
+	linked_cell_t *last;
+	linked_cell_t *wall;
 } game_state_t;
 
 typedef struct game_result_t
@@ -223,6 +233,9 @@ void print_status(WINDOW *status_win, game_state_t *state)
 {
 	char txt_buf[50];
 	int max_x = getmaxx(status_win);
+
+	// Set normal
+	wattrset(status_win, A_NORMAL);
 
 	// Deleting rows
 	wmove(status_win, 1, 0);
@@ -494,7 +507,7 @@ int snake_char_from_direction(Direction direction, Direction old_direction)
 			return ACS_HLINE;
 		}
 	}
-	// TODO crash
+	return 0;
 }
 
 int update_position(game_state_t *state, int max_x, int max_y)
@@ -513,6 +526,8 @@ int update_position(game_state_t *state, int max_x, int max_y)
 	case RIGHT:
 		state->x++;
 		break;
+	case HOLD:
+		return FALSE;
 	default:
 		break;
 	}
@@ -536,6 +551,7 @@ int update_position(game_state_t *state, int max_x, int max_y)
 		{
 			state->x = 0;
 		}
+		return FALSE;
 	}
 	else
 	{
@@ -545,8 +561,14 @@ int update_position(game_state_t *state, int max_x, int max_y)
 
 UserInteraction handle_input(game_state_t *state)
 {
+	// Set timeout
+	timeout(state->speed);
+
 	// Getting input
 	int key = getch();
+
+	// Save old direction
+	state->old_direction = state->direction;
 
 	// Changing direction according to the input
 	if (key == left_key)
@@ -588,22 +610,112 @@ UserInteraction handle_input(game_state_t *state)
 	return NONE;
 }
 
-game_result_t play_round(void)
+void paint_objects(WINDOW *game_win, game_state_t *state)
 {
-	// Init max coordinates
-	int global_max_x = getmaxx(stdscr);
-	int global_max_y = getmaxy(stdscr);
+	// Clear last cell
+	wattrset(game_win, A_NORMAL);
+	mvwaddch(game_win, state->last->y, state->last->x, ' ');
+	// Paint food
+	wattrset(game_win, COLOR_PAIR((state->superfood_counter == 0) ? 4 : 3) | A_BOLD);
+	mvwaddch(game_win, state->food_y, state->food_x, '0');
+	// Paint the snake in the specified color
+	wattrset(game_win, COLOR_PAIR(snake_color) | A_BOLD);
+	int snake_char = snake_char_from_direction(state->direction, state->old_direction);
+	if (snake_char)
+	{
+		mvwaddch(game_win, state->old_y, state->old_x, snake_char);
+	}
+	// Draw head
+	mvwaddch(game_win, state->y, state->x, 'X');
+}
 
-	// Create subwindows and their coordinates
-	WINDOW *game_win = subwin(stdscr, global_max_y - 4, global_max_x, 0, 0);
-	WINDOW *status_win = subwin(stdscr, 4, global_max_x, global_max_y - 4, 0);
-	wattrset(status_win, A_NORMAL);
-	box(status_win, 0, 0);
-
+UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, game_state_t *state)
+{
 	// Init max coordinates in relation to game window
 	int max_x = getmaxx(game_win);
 	int max_y = getmaxy(game_win);
 
+	// Save old coordinates
+	state->old_x = state->x;
+	state->old_y = state->y;
+
+	// Update position and check if outer bounds were hit
+	int wall_hit = update_position(state, max_x, max_y);
+
+	// The snake hits something
+	if (wall_hit || is_on_obstacle(state->head, state->x, state->y) || is_on_obstacle(state->wall, state->x, state->y))
+	{
+		if (state->grace_frames == 0)
+		{
+			// No grace frames left, game over
+			return GAME_OVER;
+		}
+		else
+		{
+			// We still have grace frames so we reset the coordinate and
+			// let the player change the direction
+			state->grace_frames--;
+			state->x = state->old_x;
+			state->y = state->old_y;
+			return GRACE;
+		}
+	}
+
+	// Reset grace frames
+	state->grace_frames = GRACE_FRAMES;
+
+	// Add new head to snake
+	linked_cell_t *new_cell = malloc(sizeof(linked_cell_t));
+	new_cell->x = state->x;
+	new_cell->y = state->y;
+	new_cell->last = state->head;
+	state->head->next = new_cell;
+	state->head = new_cell;
+
+	// Head hits the food
+	if ((state->x == state->food_x) && (state->y == state->food_y))
+	{
+		// Let the snake grow and change the speed
+		state->growing += state->superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
+		if (state->speed > max_speed)
+		{
+			state->speed -= SPEED_FACTOR;
+		}
+		state->points += (state->points_counter + state->length + (STARTING_SPEED - state->speed) * 5) * (state->superfood_counter == 0 ? 5 : 1);
+		state->points_counter = POINTS_COUNTER_VALUE;
+		state->superfood_counter = (state->superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : state->superfood_counter - 1;
+		new_random_coordinates(state->head, state->wall, &state->food_x, &state->food_y, max_x, max_y);
+	}
+
+	// If the snake is not growing...
+	if (state->growing == 0)
+	{
+		// ...free the memory for this cell
+		linked_cell_t *new_last;
+		state->last->next->last = NULL;
+		new_last = state->last->next;
+		free(state->last);
+		state->last = new_last;
+	}
+	else
+	{
+		// If the snake is growing and moving, just decrement 'growing'...
+		state->growing--;
+		// ...and increment 'length'
+		state->length++;
+	}
+
+	// Decrement the points that will be added
+	if (state->points_counter > MIN_POINTS)
+	{
+		state->points_counter--;
+	}
+
+	return CONTINUE;
+}
+
+game_state_t init_state(int max_x, int max_y)
+{
 	// Init gamestate
 	game_state_t state;
 	state.points = 0;
@@ -622,25 +734,14 @@ game_result_t play_round(void)
 	state.food_x = 0;
 	state.food_y = 0;
 
-	// Init result
-	game_result_t result;
-	result.points = 0;
-	result.lost = FALSE;
-	result.should_repeat = FALSE;
-
-	// Set initial timeout
-	timeout(state.speed); // The timeout for getch() makes up the game speed
-
-	// Print status window since points have been set to 0
-	print_status(status_win, &state);
-
 	// Create first cell for the snake
-	linked_cell_t *last_cell, *head = malloc(sizeof(linked_cell_t));
+	linked_cell_t *head = malloc(sizeof(linked_cell_t));
 	head->x = state.x;
 	head->y = state.y;
 	head->last = NULL;
 	head->next = NULL;
-	last_cell = head;
+	state.head = head;
+	state.last = head;
 
 	// Creating walls (all walls are referenced by one pointer)
 	linked_cell_t *wall = NULL;
@@ -705,12 +806,48 @@ game_result_t play_round(void)
 		}
 	}
 
-	if (wall != NULL)
+	state.wall = wall;
+
+	return state;
+}
+
+game_result_t play_round(void)
+{
+	// Init max coordinates
+	int global_max_x = getmaxx(stdscr);
+	int global_max_y = getmaxy(stdscr);
+
+	// Create subwindows and their coordinates
+	WINDOW *game_win = subwin(stdscr, global_max_y - 4, global_max_x, 0, 0);
+	WINDOW *status_win = subwin(stdscr, 4, global_max_x, global_max_y - 4, 0);
+	wattrset(status_win, A_NORMAL);
+	box(status_win, 0, 0);
+
+	// Init max coordinates in relation to game window
+	int max_x = getmaxx(game_win);
+	int max_y = getmaxy(game_win);
+
+	// Init gamestate
+	game_state_t state = init_state(max_x, max_y);
+
+	// Init result
+	game_result_t result;
+	result.points = 0;
+	result.lost = FALSE;
+	result.should_repeat = FALSE;
+
+	// Set initial timeout
+	timeout(state.speed); // The timeout for getch() makes up the game speed
+
+	// Print status window since points have been set to 0
+	print_status(status_win, &state);
+
+	if (state.wall != NULL)
 	{
 		// Paint the wall
 		// It should never be overwritten, since it will not be redrawn
 		linked_cell_t *tmp_cell1, *tmp_cell2;
-		tmp_cell2 = wall;
+		tmp_cell2 = state.wall;
 		wattrset(game_win, COLOR_PAIR(5) | A_BOLD);
 		do
 		{
@@ -721,142 +858,50 @@ game_result_t play_round(void)
 	}
 
 	// Init food coordinates
-	new_random_coordinates(head, wall, &state.food_x, &state.food_y, max_x, max_y);
+	new_random_coordinates(state.head, state.wall, &state.food_x, &state.food_y, max_x, max_y);
 
 	// Game-Loop
 	while (TRUE)
 	{
-		// Painting the food and the snakes head
-		wattrset(game_win, COLOR_PAIR((state.superfood_counter == 0) ? 4 : 3) | A_BOLD);
-		mvwaddch(game_win, state.food_y, state.food_x, '0');
-		wattrset(game_win, COLOR_PAIR(snake_color) | A_BOLD);
-		mvwaddch(game_win, state.y, state.x, 'X');
-
-		// Refresh game window
-		wrefresh(game_win);
-
-		// Get input
-		switch (handle_input(&state))
-		{
-		case NONE:
-			continue;
-		case PAUSE:
-			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
-			pause_game(status_win, "--- PAUSED ---", 0);
-			break;
-		case RESTART:
-			result.should_repeat = TRUE;
-			return result; // TODO Teardown
-		case QUIT:
-			return result; // TODO Teardown
-		default:
-			break;
-		}
-
-		// Set timeout
-		timeout(state.speed);
-
-		// Save old coordinates
-		state.old_x = state.x;
-		state.old_y = state.y;
-
-		// Change x and y according to the direction and paint the fitting
-		// character on the coordinate BEFORE changing the coordinate
-		// Paint the snake in the specified color
-		wattrset(game_win, COLOR_PAIR(snake_color) | A_BOLD);
-		int snake_char = snake_char_from_direction(state.direction, state.old_direction);
-		mvwaddch(game_win, state.y, state.x, snake_char);
-
-		// Update position and check if outer bounds were hit
-		int wall_hit = update_position(&state, max_x, max_y);
-
-		// The snake hits something
-		if (wall_hit || is_on_obstacle(head, state.x, state.y) || is_on_obstacle(wall, state.x, state.y))
-		{
-			if (state.grace_frames == 0)
-			{
-				// No grace frames left, game over
-				wattrset(status_win, COLOR_PAIR(3) | A_BOLD);
-				pause_game(status_win, "--- GAME OVER ---", 2);
-				result.lost = TRUE;
-				break;
-			}
-			else
-			{
-				// We still have grace frames so we reset the coordinate and
-				// let the player change the direction
-				state.grace_frames--;
-				state.x = state.old_x;
-				state.y = state.old_y;
-				continue;
-			}
-		}
-
-		// Reset grace frames
-		state.grace_frames = GRACE_FRAMES;
-
-		// Add new head to snake but don't draw it since it might hit something
-		linked_cell_t *new_cell = malloc(sizeof(linked_cell_t));
-		new_cell->x = state.x;
-		new_cell->y = state.y;
-		new_cell->last = head;
-		head->next = new_cell;
-		head = new_cell;
-
-		// Draw head
-		mvwaddch(game_win, state.y, state.x, 'X');
-
-		// Head hits the food
-		if ((state.x == state.food_x) && (state.y == state.food_y))
-		{
-			// Let the snake grow and change the speed
-			state.growing += state.superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
-			if (state.speed > max_speed)
-			{
-				state.speed -= SPEED_FACTOR;
-			}
-			state.points += (state.points_counter + state.length + (STARTING_SPEED - state.speed) * 5) * (state.superfood_counter == 0 ? 5 : 1);
-			state.points_counter = POINTS_COUNTER_VALUE;
-			timeout(state.speed);
-			state.superfood_counter = (state.superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : state.superfood_counter - 1;
-			new_random_coordinates(head, wall, &state.food_x, &state.food_y, max_x, max_y);
-		}
-
-		// If the snake is not growing...
-		if (state.growing == 0)
-		{
-			linked_cell_t *new_last;
-			// ...replace the last character from the terminal with space...
-			wattrset(game_win, A_NORMAL);
-			mvwaddch(game_win, last_cell->y, last_cell->x, ' ');
-			// ...and free the memory for this cell.
-			last_cell->next->last = NULL;
-			new_last = last_cell->next;
-			free(last_cell);
-			last_cell = new_last;
-		}
-		else
-		{
-			// If the snake is growing and moving, just decrement 'growing'...
-			state.growing--;
-			// ...and increment 'length'
-			state.length++;
-		}
-
-		// The old direction is the direction we had this round.
-		state.old_direction = state.direction;
-
-		// Decrement the points that will be added
-		if (state.points_counter > MIN_POINTS)
-		{
-			state.points_counter--;
-		}
+		// Paint snake head and food
+		paint_objects(game_win, &state);
 
 		// Update status window
 		print_status(status_win, &state);
 
 		// Refresh game window
 		wrefresh(game_win);
+
+		// Get input
+		UserInteraction interact = handle_input(&state);
+		if (interact == PAUSE)
+		{
+			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
+			pause_game(status_win, "--- PAUSED ---", 0);
+		}
+		else if (interact == RESTART)
+		{
+			result.should_repeat = TRUE;
+			break;
+		}
+		else if (interact == QUIT)
+		{
+			clean_exit();
+		}
+
+		// No movement, so no update
+		if (state.direction == HOLD)
+		{
+			continue;
+		}
+
+		// Update game state
+		UpdateResult res = update_state(game_win, status_win, &state);
+		if (res == GAME_OVER)
+		{
+			result.lost = TRUE;
+			break;
+		}
 	}
 
 	// Set a new highscore
@@ -869,11 +914,17 @@ game_result_t play_round(void)
 		pause_game(status_win, "--- NEW HIGHSCORE ---", 2);
 	}
 
+	if (result.lost)
+	{
+		wattrset(status_win, COLOR_PAIR(3) | A_BOLD);
+		pause_game(status_win, "--- GAME OVER ---", 2);
+	}
+
 	// Freeing memory used for the snake
-	free_linked_list(head);
+	free_linked_list(state.head);
 
 	// Freeing memory used for the walls
-	free_linked_list(wall);
+	free_linked_list(state.wall);
 
 	// Delete windows
 	delwin(game_win);
