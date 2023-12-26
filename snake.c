@@ -100,6 +100,9 @@ typedef struct GameConfiguration
 	int snake_color;
 } GameConfiguration;
 
+// Global configuration
+static GameConfiguration *config;
+
 // Logo generated on http://www.network-science.de/ascii/
 // Used font: nancyj
 static const char *LOGO[] = {
@@ -135,41 +138,40 @@ char *init_file_path(void)
 	return file_path;
 }
 
-GameConfiguration init_configuration(void)
+void init_configuration(void)
 {
-	GameConfiguration config;
-	config.save_file_path = init_file_path();
-	config.max_speed = STD_MAX_SPEED;
-	config.highscore = 0;
-	config.remove_flag = FALSE;
-	config.ignore_flag = FALSE;
-	config.custom_flag = FALSE;
-	config.open_bounds_flag = FALSE;
-	config.skip_flag = FALSE;
-	config.wall_flag = FALSE;
-	config.wall_pattern = 0;
-	config.snake_color = 2;
-	config.up_key = KEY_UP;
-	config.down_key = KEY_DOWN;
-	config.left_key = KEY_LEFT;
-	config.right_key = KEY_RIGHT;
-	return config;
+	config = malloc(sizeof(GameConfiguration));
+	config->save_file_path = init_file_path();
+	config->max_speed = STD_MAX_SPEED;
+	config->highscore = 0;
+	config->remove_flag = FALSE;
+	config->ignore_flag = FALSE;
+	config->custom_flag = FALSE;
+	config->open_bounds_flag = FALSE;
+	config->skip_flag = FALSE;
+	config->wall_flag = FALSE;
+	config->wall_pattern = 0;
+	config->snake_color = 2;
+	config->up_key = KEY_UP;
+	config->down_key = KEY_DOWN;
+	config->left_key = KEY_LEFT;
+	config->right_key = KEY_RIGHT;
 }
 
-void write_score_file(GameConfiguration config, int score)
+void write_score_file(int score)
 {
 	// If we ignore the score file we return
-	if (config.ignore_flag)
+	if (config->ignore_flag)
 		return;
 
 	// Memory for the string representation of the score
 	char score_str[FILE_LENGTH];
 
 	// Write highscore into memory
-	sprintf(score_str, "%.*lld", FILE_LENGTH - 1, config.highscore);
+	sprintf(score_str, "%.*lld", FILE_LENGTH - 1, config->highscore);
 
 	// Open file
-	FILE *file = fopen(config.save_file_path, "w");
+	FILE *file = fopen(config->save_file_path, "w");
 
 	// Something went wrong
 	// TODO: Have error handling
@@ -181,7 +183,7 @@ void write_score_file(GameConfiguration config, int score)
 	fclose(file);
 }
 
-void read_score_file(GameConfiguration *config)
+void read_score_file(void)
 {
 	// If we ignore the score file we return
 	if (config->ignore_flag)
@@ -239,7 +241,7 @@ void print_offset(WINDOW *window, int x_offset, int y, const char string[])
 	mvwaddstr(window, y, x + x_offset, string);
 }
 
-void print_status(WINDOW *status_win, GameState *state, GameConfiguration config)
+void print_status(WINDOW *status_win, GameState *state)
 {
 	char txt_buf[50];
 	int max_x = getmaxx(status_win);
@@ -266,7 +268,7 @@ void print_status(WINDOW *status_win, GameState *state, GameConfiguration config
 		mvwaddstr(status_win, 1, (max_x / 3) - half_len(txt_buf), txt_buf);
 
 		// Print highscore
-		sprintf(txt_buf, "Highscore: %lld", config.highscore);
+		sprintf(txt_buf, "Highscore: %lld", config->highscore);
 		mvwaddstr(status_win, 1, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
 
 		// Print points counter
@@ -520,7 +522,7 @@ int snake_char_from_direction(Direction direction, Direction old_direction)
 	return 0;
 }
 
-int update_position(GameState *state, int max_x, int max_y, GameConfiguration config)
+int update_position(GameState *state, int max_x, int max_y)
 {
 	switch (state->direction)
 	{
@@ -542,7 +544,7 @@ int update_position(GameState *state, int max_x, int max_y, GameConfiguration co
 		break;
 	}
 
-	if (config.open_bounds_flag)
+	if (config->open_bounds_flag)
 	{
 		// If you hit the outer bounds you'll end up on the other side
 		if (state->y < 0)
@@ -569,7 +571,7 @@ int update_position(GameState *state, int max_x, int max_y, GameConfiguration co
 	}
 }
 
-UserInteraction handle_input(GameState *state, GameConfiguration config)
+UserInteraction handle_input(GameState *state)
 {
 	// Set timeout
 	timeout(state->speed);
@@ -581,25 +583,25 @@ UserInteraction handle_input(GameState *state, GameConfiguration config)
 	state->old_direction = state->direction;
 
 	// Changing direction according to the input
-	if (key == config.left_key)
+	if (key == config->left_key)
 	{
 		if (state->direction != RIGHT)
 			state->direction = LEFT;
 		return DIRECTION;
 	}
-	else if (key == config.right_key)
+	else if (key == config->right_key)
 	{
 		if (state->direction != LEFT)
 			state->direction = RIGHT;
 		return DIRECTION;
 	}
-	else if (key == config.up_key)
+	else if (key == config->up_key)
 	{
 		if (state->direction != DOWN)
 			state->direction = UP;
 		return DIRECTION;
 	}
-	else if (key == config.down_key)
+	else if (key == config->down_key)
 	{
 		if (state->direction != UP)
 			state->direction = DOWN;
@@ -620,7 +622,7 @@ UserInteraction handle_input(GameState *state, GameConfiguration config)
 	return NONE;
 }
 
-void paint_objects(WINDOW *game_win, GameState *state, GameConfiguration config)
+void paint_objects(WINDOW *game_win, GameState *state)
 {
 	// Clear last cell
 	wattrset(game_win, A_NORMAL);
@@ -629,7 +631,7 @@ void paint_objects(WINDOW *game_win, GameState *state, GameConfiguration config)
 	wattrset(game_win, COLOR_PAIR((state->superfood_counter == 0) ? 4 : 3) | A_BOLD);
 	mvwaddch(game_win, state->food_y, state->food_x, '0');
 	// Paint the snake in the specified color
-	wattrset(game_win, COLOR_PAIR(config.snake_color) | A_BOLD);
+	wattrset(game_win, COLOR_PAIR(config->snake_color) | A_BOLD);
 	int snake_char = snake_char_from_direction(state->direction, state->old_direction);
 	if (snake_char)
 	{
@@ -639,7 +641,7 @@ void paint_objects(WINDOW *game_win, GameState *state, GameConfiguration config)
 	mvwaddch(game_win, state->y, state->x, 'X');
 }
 
-UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state, GameConfiguration config)
+UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state)
 {
 	// Init max coordinates in relation to game window
 	int max_x = getmaxx(game_win);
@@ -650,7 +652,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	state->old_y = state->y;
 
 	// Update position and check if outer bounds were hit
-	int wall_hit = update_position(state, max_x, max_y, config);
+	int wall_hit = update_position(state, max_x, max_y);
 
 	// The snake hits something
 	if (wall_hit || is_on_obstacle(state->head, state->x, state->y) || is_on_obstacle(state->wall, state->x, state->y))
@@ -687,7 +689,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	{
 		// Let the snake grow and change the speed
 		state->growing += state->superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
-		if (state->speed > config.max_speed)
+		if (state->speed > config->max_speed)
 		{
 			state->speed -= SPEED_FACTOR;
 		}
@@ -724,7 +726,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	return CONTINUE;
 }
 
-GameState init_state(int max_x, int max_y, GameConfiguration config)
+GameState init_state(int max_x, int max_y)
 {
 	// Init gamestate
 	GameState state;
@@ -756,9 +758,9 @@ GameState init_state(int max_x, int max_y, GameConfiguration config)
 	// Creating walls (all walls are referenced by one pointer)
 	LinkedCell *wall = NULL;
 	int bigger, smaller, constant;
-	if (config.wall_flag)
+	if (config->wall_flag)
 	{
-		switch (config.wall_pattern)
+		switch (config->wall_pattern)
 		{
 		case 1:
 			wall = create_wall(0, max_y / 4, max_x / 2, DOWN, NULL);
@@ -821,7 +823,7 @@ GameState init_state(int max_x, int max_y, GameConfiguration config)
 	return state;
 }
 
-GameResult play_round(GameConfiguration config)
+GameResult play_round(void)
 {
 	// Init max coordinates
 	int global_max_x = getmaxx(stdscr);
@@ -836,7 +838,7 @@ GameResult play_round(GameConfiguration config)
 	int max_y = getmaxy(game_win);
 
 	// Init gamestate
-	GameState state = init_state(max_x, max_y, config);
+	GameState state = init_state(max_x, max_y);
 
 	// Init result
 	GameResult result;
@@ -848,7 +850,7 @@ GameResult play_round(GameConfiguration config)
 	timeout(state.speed); // The timeout for getch() makes up the game speed
 
 	// Print status window since points have been set to 0
-	print_status(status_win, &state, config);
+	print_status(status_win, &state);
 
 	if (state.wall != NULL)
 	{
@@ -872,16 +874,16 @@ GameResult play_round(GameConfiguration config)
 	while (TRUE)
 	{
 		// Paint snake head and food
-		paint_objects(game_win, &state, config);
+		paint_objects(game_win, &state);
 
 		// Update status window
-		print_status(status_win, &state, config);
+		print_status(status_win, &state);
 
 		// Refresh game window
 		wrefresh(game_win);
 
 		// Get input
-		UserInteraction interact = handle_input(&state, config);
+		UserInteraction interact = handle_input(&state);
 		if (interact == PAUSE)
 		{
 			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
@@ -905,7 +907,7 @@ GameResult play_round(GameConfiguration config)
 		}
 
 		// Update game state
-		UpdateResult res = update_state(game_win, status_win, &state, config);
+		UpdateResult res = update_state(game_win, status_win, &state);
 		if (res == GAME_OVER)
 		{
 			result.lost = TRUE;
@@ -914,10 +916,10 @@ GameResult play_round(GameConfiguration config)
 	}
 
 	// Set a new highscore
-	if (state.points > config.highscore)
+	if (state.points > config->highscore)
 	{
 		// Write highscore to local file
-		write_score_file(config, state.points);
+		write_score_file(state.points);
 		// Display status
 		wattrset(status_win, COLOR_PAIR(2) | A_BOLD);
 		pause_game(status_win, "--- NEW HIGHSCORE ---", 2);
@@ -946,7 +948,7 @@ GameResult play_round(GameConfiguration config)
 	return result;
 }
 
-GameConfiguration show_options(WINDOW *options_win, GameConfiguration config)
+void show_options(WINDOW *options_win)
 {
 	int i, index = 0;
 	char txt_buf[30];
@@ -971,9 +973,9 @@ option_show:
 
 	// Print values for options
 	wattrset(options_win, COLOR_PAIR(1));
-	print_offset(options_win, 10, 0, config.open_bounds_flag ? "Open" : "Closed");
-	print_offset(options_win, 10, 1, config.wall_flag ? "Enabled" : "Disabled");
-	sprintf(txt_buf, "%d", config.wall_pattern);
+	print_offset(options_win, 10, 0, config->open_bounds_flag ? "Open" : "Closed");
+	print_offset(options_win, 10, 1, config->wall_flag ? "Enabled" : "Disabled");
+	sprintf(txt_buf, "%d", config->wall_pattern);
 	print_offset(options_win, 10, 2, txt_buf);
 
 	// Refresh window
@@ -981,14 +983,14 @@ option_show:
 
 	// Wait for input
 	int key = getch();
-	if (key == config.up_key)
+	if (key == config->up_key)
 	{
 		if (index == 0)
 			index = 3;
 		else
 			index--;
 	}
-	else if (key == config.down_key)
+	else if (key == config->down_key)
 	{
 		index = (index + 1) % 4;
 	}
@@ -997,23 +999,23 @@ option_show:
 		switch (index)
 		{
 		case 0:
-			config.open_bounds_flag = !config.open_bounds_flag;
+			config->open_bounds_flag = !config->open_bounds_flag;
 			break;
 		case 1:
-			config.wall_flag = !config.wall_flag;
+			config->wall_flag = !config->wall_flag;
 			break;
 		case 2:
-			config.wall_pattern = (config.wall_pattern + 1) % 6;
+			config->wall_pattern = (config->wall_pattern + 1) % 6;
 			break;
 		case 3:
-			return config;
+			return;
 		}
 	}
 
 	goto option_show;
 }
 
-GameConfiguration show_startscreen(GameConfiguration config)
+GameConfiguration show_startscreen(void)
 {
 	// Getting screen dimensions
 	int max_x = getmaxx(stdscr);
@@ -1029,7 +1031,7 @@ show:
 	clear();
 
 	// Print logo
-	attrset(COLOR_PAIR(config.snake_color) | A_BOLD);
+	attrset(COLOR_PAIR(config->snake_color) | A_BOLD);
 	for (i = 0; i < 6; i++)
 	{
 		print_centered(stdscr, (max_y / 4) + i, LOGO[i]);
@@ -1063,14 +1065,14 @@ show:
 
 	// Wait for input
 	int key = getch();
-	if (key == config.up_key)
+	if (key == config->up_key)
 	{
 		if (index == 0)
 			index = 3;
 		else
 			index--;
 	}
-	else if (key == config.down_key)
+	else if (key == config->down_key)
 	{
 		index = (index + 1) % 4;
 	}
@@ -1081,10 +1083,10 @@ show:
 		case 0:
 			clear();
 			refresh();
-			play_round(config);
+			play_round();
 			break;
 		case 1:
-			show_options(options_win, config);
+			show_options(options_win);
 			break;
 		case 2:
 			print_centered(options_win, 0, "Programming by Philipp Hagenlocher");
@@ -1106,7 +1108,7 @@ show:
 	goto show;
 }
 
-void parse_arguments(int argc, char **argv, GameConfiguration *config)
+void parse_arguments(int argc, char **argv)
 {
 	int arg, int_arg, vim_flag, option_index;
 	option_index = 0;
@@ -1211,32 +1213,33 @@ void parse_arguments(int argc, char **argv, GameConfiguration *config)
 
 int main(int argc, char **argv)
 {
-	GameConfiguration config = init_configuration();
+	// Globally initialize configuration
+	init_configuration();
 
 	// Parse arguments
-	parse_arguments(argc, argv, &config);
+	parse_arguments(argc, argv);
 
 	// Seed RNG with current time
 	srand(time(NULL));
 
-	if (config.save_file_path != NULL)
+	if (config->save_file_path != NULL)
 	{
 		// If the remove flag has been set we remove the file and exit
-		if (config.remove_flag)
+		if (config->remove_flag)
 		{
-			remove(config.save_file_path);
+			remove(config->save_file_path);
 			exit(0);
 		}
 		else
 		{
 			// Read local highscore
-			read_score_file(&config);
+			read_score_file();
 		}
 	}
 	else
 	{
 		// Path to savefile could not be determined
-		config.skip_flag = TRUE;
+		config->skip_flag = TRUE;
 	}
 
 	// Init colors and ncurses specific functions
@@ -1272,19 +1275,19 @@ int main(int argc, char **argv)
 	// correctly so we have to skip the title.
 	if ((max_x < 64) || (max_y < 19))
 	{
-		config.skip_flag = TRUE;
+		config->skip_flag = TRUE;
 	}
 
 	// Endless loop until the user quits the game
 	while (TRUE)
 	{
-		if (config.skip_flag)
+		if (config->skip_flag)
 		{
-			play_round(config);
+			play_round();
 		}
 		else
 		{
-			show_startscreen(config);
+			show_startscreen();
 		}
 	}
 }
