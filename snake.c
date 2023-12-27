@@ -100,7 +100,7 @@ typedef struct GameConfiguration
 	int snake_color;
 } GameConfiguration;
 
-// Global configuration
+// Global configuration (must be initialized with `init_configuration` before use)
 static GameConfiguration *config;
 
 // Logo generated on http://www.network-science.de/ascii/
@@ -164,6 +164,10 @@ void write_score_file(int score)
 	if (config->ignore_flag)
 		return;
 
+	// If the file path was not initialized we also return
+	if (config->save_file_path == NULL)
+		return;
+
 	// Memory for the string representation of the score
 	char score_str[FILE_LENGTH];
 
@@ -187,6 +191,10 @@ void read_score_file(void)
 {
 	// If we ignore the score file we return
 	if (config->ignore_flag)
+		return;
+
+	// If the file path was not initialized we also return
+	if (config->save_file_path == NULL)
 		return;
 
 	// Memory for file contents
@@ -268,7 +276,14 @@ void print_status(WINDOW *status_win, GameState *state)
 		mvwaddstr(status_win, 1, (max_x / 3) - half_len(txt_buf), txt_buf);
 
 		// Print highscore
-		sprintf(txt_buf, "Highscore: %lld", config->highscore);
+		if (config->highscore != 0)
+		{
+			sprintf(txt_buf, "Highscore: %lld", config->highscore);
+		}
+		else
+		{
+			sprintf(txt_buf, "No highscore set");
+		}
 		mvwaddstr(status_win, 1, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
 
 		// Print points counter
@@ -908,6 +923,8 @@ GameResult play_round(void)
 	{
 		// Write highscore to local file
 		write_score_file(state.points);
+		// Remember the highscore
+		config->highscore = state.points;
 		// Display status
 		wattrset(status_win, COLOR_PAIR(2) | A_BOLD);
 		pause_game(status_win, "--- NEW HIGHSCORE ---", 2);
