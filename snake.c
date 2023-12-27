@@ -83,7 +83,6 @@ typedef struct GameState
 
 typedef struct GameResult
 {
-	long long points;
 	int lost;
 	int should_repeat;
 } GameResult;
@@ -845,7 +844,6 @@ GameResult play_round(void)
 
 	// Init result
 	GameResult result;
-	result.points = 0;
 	result.lost = FALSE;
 	result.should_repeat = FALSE;
 
@@ -951,6 +949,16 @@ GameResult play_round(void)
 	refresh();
 
 	return result;
+}
+
+void play_game(void)
+{
+	while (TRUE)
+	{
+		GameResult result = play_round();
+		if (!result.should_repeat)
+			return;
+	}
 }
 
 void show_options(WINDOW *options_win)
@@ -1093,7 +1101,7 @@ show:
 		case 0:
 			clear();
 			refresh();
-			play_round();
+			play_game();
 			break;
 		case 1:
 			show_options(options_win);
@@ -1293,7 +1301,7 @@ int main(int argc, char **argv)
 	{
 		if (config->skip_flag)
 		{
-			play_round();
+			play_game();
 		}
 		else
 		{
