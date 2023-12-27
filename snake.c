@@ -150,7 +150,7 @@ void init_configuration(void)
 	config->open_bounds_flag = FALSE;
 	config->skip_flag = FALSE;
 	config->wall_flag = FALSE;
-	config->wall_pattern = 0;
+	config->wall_pattern = 1;
 	config->snake_color = 2;
 	config->up_key = KEY_UP;
 	config->down_key = KEY_DOWN;
@@ -726,38 +726,10 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	return CONTINUE;
 }
 
-GameState init_state(int max_x, int max_y)
+LinkedCell *init_wall(int max_x, int max_y)
 {
-	// Init gamestate
-	GameState state;
-	state.points = 0;
-	state.speed = STARTING_SPEED;
-	state.x = max_x / 2;
-	state.y = max_y / 2;
-	state.old_x = state.x;
-	state.old_y = state.y;
-	state.points_counter = POINTS_COUNTER_VALUE;
-	state.length = STARTING_LENGTH;
-	state.growing = GROW_FACTOR;
-	state.grace_frames = GRACE_FRAMES;
-	state.direction = HOLD;
-	state.old_direction = HOLD;
-	state.superfood_counter = SUPERFOOD_COUNTER_VALUE;
-	state.food_x = 0;
-	state.food_y = 0;
-
-	// Create first cell for the snake
-	LinkedCell *head = malloc(sizeof(LinkedCell));
-	head->x = state.x;
-	head->y = state.y;
-	head->last = NULL;
-	head->next = NULL;
-	state.head = head;
-	state.last = head;
-
 	// Creating walls (all walls are referenced by one pointer)
 	LinkedCell *wall = NULL;
-	int bigger, smaller, constant;
 	if (config->wall_flag)
 	{
 		switch (config->wall_pattern)
@@ -797,28 +769,44 @@ GameState init_state(int max_x, int max_y)
 			wall = create_wall(max_x, 3 * max_x / 4, max_y / 2, LEFT, wall);
 			break;
 		default:
-			// Random wall creation
-			constant = rand() % (max_y / 2 - 1);
-			do
-			{
-				// Since (smaller - 1) is used for modulo division
-				// it has to be bigger than 1
-				smaller = (rand() % (max_x - 4)) / 2;
-			} while (smaller <= 1);
-			bigger = max_x - smaller;
-			wall = create_wall(smaller, bigger, constant, RIGHT, NULL);
-			wall = create_wall(smaller, bigger, max_y - constant - 1, RIGHT, wall);
-
-			constant = rand() % (smaller - 1);
-			smaller = (rand() % max_y) / 2;
-			bigger = max_y - smaller + 1;
-			wall = create_wall(smaller, bigger, constant, DOWN, wall);
-			wall = create_wall(smaller, bigger, max_x - constant, DOWN, wall);
-			break;
+			fprintf(stderr, "Illegal wall pattern: %d\n", config->wall_pattern);
+			abort();
 		}
 	}
+	return wall;
+}
 
-	state.wall = wall;
+GameState init_state(int max_x, int max_y)
+{
+	// Init gamestate
+	GameState state;
+	state.points = 0;
+	state.speed = STARTING_SPEED;
+	state.x = max_x / 2;
+	state.y = max_y / 2;
+	state.old_x = state.x;
+	state.old_y = state.y;
+	state.points_counter = POINTS_COUNTER_VALUE;
+	state.length = STARTING_LENGTH;
+	state.growing = GROW_FACTOR;
+	state.grace_frames = GRACE_FRAMES;
+	state.direction = HOLD;
+	state.old_direction = HOLD;
+	state.superfood_counter = SUPERFOOD_COUNTER_VALUE;
+	state.food_x = 0;
+	state.food_y = 0;
+
+	// Create first cell for the snake
+	LinkedCell *head = malloc(sizeof(LinkedCell));
+	head->x = state.x;
+	head->y = state.y;
+	head->last = NULL;
+	head->next = NULL;
+	state.head = head;
+	state.last = head;
+
+	// Init wall
+	state.wall = init_wall(max_x, max_y);
 
 	return state;
 }
@@ -950,7 +938,7 @@ GameResult play_round(void)
 
 void show_options(WINDOW *options_win)
 {
-	int i, index = 0;
+	int i, new_pattern, index = 0;
 	char txt_buf[30];
 
 option_show:
@@ -1005,7 +993,12 @@ option_show:
 			config->wall_flag = !config->wall_flag;
 			break;
 		case 2:
-			config->wall_pattern = (config->wall_pattern + 1) % 6;
+			new_pattern = (config->wall_pattern + 1) % 6;
+			if (new_pattern == 0)
+			{
+				new_pattern = 1;
+			}
+			config->wall_pattern = new_pattern;
 			break;
 		case 3:
 			return;
@@ -1158,7 +1151,7 @@ void parse_arguments(int argc, char **argv)
 			break;
 		case 'w':
 			int_arg = atoi(optarg);
-			if (in_range(int_arg, 0, 5))
+			if (in_range(int_arg, 1, 5))
 			{
 				config->wall_flag = TRUE;
 				config->wall_pattern = int_arg;
@@ -1179,7 +1172,7 @@ void parse_arguments(int argc, char **argv)
 			printf("Usage: %s [options]\n", argv[0]);
 			printf("Options:\n");
 			printf(" --open-bounds, -o\n\tOuter bounds will let the snake pass through\n");
-			printf(" --walls <0-5>, -w <0-5>\n\tEnable a predefined wall pattern (0 is random!)\n");
+			printf(" --walls <1-5>, -w <1-5>\n\tEnable a predefined wall pattern\n");
 			printf(" --color <1-5>, -c <1-5>\n\tSet the snakes color:\n\t1 = White\n\t2 = Green\n\t3 = Red\n\t4 = Yellow\n\t5 = Blue\n");
 			printf(" --skip-title, -s\n\tSkip the title screen\n");
 			printf(" --remove-savefile, -r\n\tRemove the savefile and quit\n");
