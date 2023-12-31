@@ -7,7 +7,11 @@
 #include <time.h>
 #include <pwd.h>
 
-// Macros
+#define ERROR 1
+#define SUCCESS 0
+#define clean_exit(code) \
+	endwin();            \
+	exit(code);
 #define is_horizontal(direction) ((direction == LEFT) || (direction == RIGHT))
 #define in_range(x, min, max) (x >= min) && (x <= max)
 
@@ -116,8 +120,6 @@ char *init_file_path(void)
 {
 	// Get "HOME" environment variable
 	char *home_dir = getenv("HOME");
-
-	// We couldn't get the environment variable so we ignore the savefile
 	if (home_dir == NULL)
 	{
 		return NULL;
@@ -125,26 +127,16 @@ char *init_file_path(void)
 
 	// Allocate space for the home path, the filename, '/' and the zero byte
 	char *file_path = malloc(strlen(home_dir) + strlen(STD_FILE_NAME) + 2);
-
-	// Write path to the global variable
-	if (sprintf(file_path, "%s/%s", home_dir, STD_FILE_NAME) < 1)
-	{
-		// If something went wrong, deallocate memory and ignore savefile
-		free(file_path);
-		return NULL;
-	}
-
+	sprintf(file_path, "%s/%s", home_dir, STD_FILE_NAME);
 	return file_path;
 }
 
 void init_configuration(void)
 {
 	config = malloc(sizeof(GameConfiguration));
-	config->save_file_path = init_file_path();
 	config->max_speed = STD_MAX_SPEED;
 	config->highscore = 0;
 	config->remove_flag = FALSE;
-	config->ignore_flag = FALSE;
 	config->custom_flag = FALSE;
 	config->open_bounds_flag = FALSE;
 	config->skip_flag = FALSE;
@@ -155,59 +147,63 @@ void init_configuration(void)
 	config->down_key = KEY_DOWN;
 	config->left_key = KEY_LEFT;
 	config->right_key = KEY_RIGHT;
+
+	char *save_file_path = init_file_path();
+	config->save_file_path = save_file_path;
+	config->ignore_flag = save_file_path == NULL ? TRUE : FALSE;
 }
 
-void write_score_file(int score)
+// Write a score to the score file, reading the file path from the global config
+// Returns a non-zero value on error
+int write_score_file(long long score)
 {
 	// If we ignore the score file we return
-	if (config->ignore_flag)
-		return;
-
 	// If the file path was not initialized we also return
-	if (config->save_file_path == NULL)
-		return;
+	if (config->ignore_flag || config->save_file_path == NULL)
+	{
+		return SUCCESS;
+	}
 
 	// Memory for the string representation of the score
 	char score_str[FILE_LENGTH];
 
 	// Write highscore into memory
-	sprintf(score_str, "%.*lld", FILE_LENGTH - 1, config->highscore);
+	sprintf(score_str, "%.*lld", FILE_LENGTH - 1, score);
 
 	// Open file
 	FILE *file = fopen(config->save_file_path, "w");
-
-	// Something went wrong
-	// TODO: Have error handling
 	if (file == NULL)
-		return;
+	{
+		return ERROR;
+	}
 
 	// Write score to file and close it
 	fputs(score_str, file);
 	fclose(file);
+	return SUCCESS;
 }
 
-void read_score_file(void)
+// Read the highscore from the score file, reading the file path from the global config
+// Returns a non-zero value on error
+int read_score_file(void)
 {
 	// If we ignore the score file we return
 	if (config->ignore_flag)
-		return;
+		return SUCCESS;
 
 	// If the file path was not initialized we also return
 	if (config->save_file_path == NULL)
-		return;
+		return SUCCESS;
 
 	// Memory for file contents
 	char content[FILE_LENGTH];
 
 	// Open file
 	FILE *file = fopen(config->save_file_path, "r");
-
-	// Something went wrong
-	// TODO: Have error handling
 	if (file == NULL)
 	{
 		config->highscore = 0;
-		return;
+		return ERROR;
 	}
 
 	// Read file contents and interpret the score
@@ -218,15 +214,7 @@ void read_score_file(void)
 
 	// Close the file
 	fclose(file);
-}
-
-void clean_exit(void)
-{
-	// End ncurses
-	endwin();
-
-	// The OS handles the rest
-	exit(0);
+	return SUCCESS;
 }
 
 inline size_t half_len(const char string[])
@@ -831,6 +819,10 @@ GameResult play_round(void)
 	int global_max_x = getmaxx(stdscr);
 	int global_max_y = getmaxy(stdscr);
 
+	// Clear screen
+	clear();
+	refresh();
+
 	// Create subwindows
 	WINDOW *game_win = subwin(stdscr, global_max_y - 4, global_max_x, 0, 0);
 	WINDOW *status_win = subwin(stdscr, 4, global_max_x, global_max_y - 4, 0);
@@ -898,7 +890,7 @@ GameResult play_round(void)
 		}
 		else if (interact == QUIT)
 		{
-			clean_exit();
+			clean_exit(0);
 		}
 
 		// No movement, so no update
@@ -919,13 +911,22 @@ GameResult play_round(void)
 	// Set a new highscore
 	if (state.points > config->highscore)
 	{
-		// Write highscore to local file
-		write_score_file(state.points);
 		// Remember the highscore
 		config->highscore = state.points;
-		// Display status
-		wattrset(status_win, COLOR_PAIR(2) | A_BOLD);
-		pause_game(status_win, "--- NEW HIGHSCORE ---", 2);
+
+		// Write highscore to local file
+		if (write_score_file(state.points) == SUCCESS)
+		{
+			wattrset(status_win, COLOR_PAIR(2) | A_BOLD);
+			pause_game(status_win, "--- NEW HIGHSCORE ---", 2);
+		}
+		else
+		{
+			endwin();
+			fprintf(stderr, "Unable to write savefile at %s\n", config->save_file_path);
+			fprintf(stderr, "Final highscore was: %lld\n", state.points);
+			exit(1);
+		}
 	}
 
 	if (result.lost)
@@ -1099,8 +1100,6 @@ show:
 		switch (index)
 		{
 		case 0:
-			clear();
-			refresh();
 			play_game();
 			break;
 		case 1:
@@ -1115,7 +1114,7 @@ show:
 			getch();
 			break;
 		case 3:
-			clean_exit();
+			clean_exit(0);
 		}
 	}
 
@@ -1251,13 +1250,13 @@ int main(int argc, char **argv)
 		else
 		{
 			// Read local highscore
-			read_score_file();
+			if (read_score_file() == ERROR)
+			{
+				fprintf(stderr, "Unable to read savefile at %s\n", config->save_file_path);
+				fprintf(stderr, "If the error persists try using the --ignore-savefile flag!\n");
+				exit(1);
+			}
 		}
-	}
-	else
-	{
-		// Path to savefile could not be determined
-		config->skip_flag = TRUE;
 	}
 
 	// Init colors and ncurses specific functions
