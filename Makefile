@@ -1,5 +1,5 @@
 CC = cc
-CFLAGS = -O3 -fomit-frame-pointer -fPIE -fshort-enums -Wall -pedantic
+CFLAGS = --std=c99 -O3 -fomit-frame-pointer -fPIE -fshort-enums -Wall -pedantic
 TARGET = csnake
 bindir = /usr/local/bin
 
