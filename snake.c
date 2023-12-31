@@ -1,4 +1,5 @@
 #include <ncurses.h>
+#include <stdbool.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +13,6 @@
 #define clean_exit(code) \
 	endwin();            \
 	exit(code);
-#define is_horizontal(direction) ((direction == LEFT) || (direction == RIGHT))
 #define in_range(x, min, max) (x >= min) && (x <= max)
 
 // Constants important for gameplay
@@ -26,6 +26,8 @@
 #define SUPERFOOD_GROW_FACTOR 15
 #define SPEED_FACTOR 2
 #define GRACE_FRAMES 3
+
+// Misc. constants
 #define VERSION "0.57.1 (Beta)"
 #define CC_END_YEAR "2024"
 #define STD_FILE_NAME ".csnake"
@@ -56,10 +58,15 @@ typedef enum UpdateResult
 	CONTINUE
 } UpdateResult;
 
-typedef struct LinkedCell
+typedef struct Coord
 {
 	int x;
 	int y;
+} Coord;
+
+typedef struct LinkedCell
+{
+	Coord coord;
 	struct LinkedCell *last;
 	struct LinkedCell *next;
 } LinkedCell;
@@ -70,17 +77,14 @@ typedef struct GameState
 	Direction direction;
 	Direction old_direction;
 	int speed;
-	int x;
-	int y;
-	int old_x;
-	int old_y;
+	Coord pos;
+	Coord old_pos;
 	int points_counter;
 	int length;
 	int growing;
 	int grace_frames;
 	int superfood_counter;
-	int food_x;
-	int food_y;
+	Coord food_coord;
 	LinkedCell *head;
 	LinkedCell *last;
 	LinkedCell *wall;
@@ -141,11 +145,11 @@ void init_configuration(void)
 	config->save_file_path = init_file_path();
 	config->max_speed = STD_MAX_SPEED;
 	config->highscore = 0;
-	config->ignore_flag = FALSE;
-	config->remove_flag = FALSE;
-	config->open_bounds_flag = FALSE;
-	config->skip_flag = FALSE;
-	config->wall_flag = FALSE;
+	config->ignore_flag = false;
+	config->remove_flag = false;
+	config->open_bounds_flag = false;
+	config->skip_flag = false;
+	config->wall_flag = false;
 	config->wall_pattern = 1;
 	config->snake_color = 2;
 	config->up_key = KEY_UP;
@@ -223,6 +227,19 @@ int read_score_file(void)
 	// Close the file
 	fclose(file);
 	return SUCCESS;
+}
+
+inline Coord coord(int x, int y)
+{
+	Coord coord;
+	coord.x = x;
+	coord.y = y;
+	return coord;
+}
+
+inline Coord get_max_coords(WINDOW *win)
+{
+	return coord(getmaxx(win), getmaxy(win));
 }
 
 inline size_t half_len(const char string[])
@@ -340,43 +357,46 @@ void pause_game(WINDOW *status_win, const char string[], const int seconds)
 	wrefresh(status_win);
 }
 
-int is_on_obstacle(LinkedCell *test_cell, const int x, const int y)
+bool is_on_obstacle(LinkedCell *test_cell, const int x, const int y)
 {
 	// Not a valid cell to test
 	if (test_cell == NULL)
-		return FALSE;
+		return false;
 
 	do
 	{
 		// A cell has the same coordinates as the point to check
-		if ((test_cell->x == x) && (test_cell->y == y))
-			return TRUE;
+		if ((test_cell->coord.x == x) && (test_cell->coord.y == y))
+			return true;
 
 		// Check next cell
 		test_cell = test_cell->last;
 	} while (test_cell != NULL);
 
 	// No cell found
-	return FALSE;
+	return false;
 }
 
 void new_random_coordinates(
 	LinkedCell *snake,
 	LinkedCell *wall,
-	int *x,
-	int *y,
-	int max_x,
-	int max_y)
+	Coord *coord,
+	Coord max_coords)
 {
+	int x, y;
 	do
 	{
 		// Generate random coordinates
-		*x = rand() % max_x;
-		*y = rand() % max_y;
+		x = rand() % max_coords.x;
+		y = rand() % max_coords.y;
 
 		// Check if the coordinates are on the snake or wall
 		// If so, generate new values
-	} while (is_on_obstacle(snake, *x, *y) || is_on_obstacle(wall, *x, *y));
+	} while (is_on_obstacle(snake, x, y) || is_on_obstacle(wall, x, y));
+
+	// Save coordinates
+	coord->x = x;
+	coord->y = y;
 }
 
 LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedCell *last_cell)
@@ -385,15 +405,13 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 	LinkedCell *new_wall, *wall = malloc(sizeof(LinkedCell));
 
 	// Based on the direction set either x or y to a constant value
-	if (is_horizontal(dir))
+	if ((dir == LEFT) || (dir == RIGHT))
 	{
-		wall->x = start;
-		wall->y = constant;
+		wall->coord = coord(start, constant);
 	}
 	else
 	{
-		wall->x = constant;
-		wall->y = start;
+		wall->coord = coord(constant, start);
 	}
 
 	// Connect the new wall to an old one
@@ -408,8 +426,7 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		for (i = start - 1; i > end; i--)
 		{
 			new_wall = malloc(sizeof(LinkedCell));
-			new_wall->x = constant;
-			new_wall->y = i;
+			new_wall->coord = coord(constant, i);
 			new_wall->last = wall;
 			wall = new_wall;
 		}
@@ -418,8 +435,7 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		for (i = start + 1; i < end; i++)
 		{
 			new_wall = malloc(sizeof(LinkedCell));
-			new_wall->x = constant;
-			new_wall->y = i;
+			new_wall->coord = coord(i, constant);
 			new_wall->last = wall;
 			wall = new_wall;
 		}
@@ -428,8 +444,7 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		for (i = start - 1; i > end; i--)
 		{
 			new_wall = malloc(sizeof(LinkedCell));
-			new_wall->x = i;
-			new_wall->y = constant;
+			new_wall->coord = coord(constant, i);
 			new_wall->last = wall;
 			wall = new_wall;
 		}
@@ -438,8 +453,7 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		for (i = start + 1; i < end; i++)
 		{
 			new_wall = malloc(sizeof(LinkedCell));
-			new_wall->x = i;
-			new_wall->y = constant;
+			new_wall->coord = coord(i, constant);
 			new_wall->last = wall;
 			wall = new_wall;
 		}
@@ -532,24 +546,24 @@ int snake_char_from_direction(Direction direction, Direction old_direction)
 	return 0;
 }
 
-int update_position(GameState *state, int max_x, int max_y)
+bool update_position(GameState *state, Coord max_coord)
 {
 	switch (state->direction)
 	{
 	case UP:
-		state->y--;
+		state->pos.y--;
 		break;
 	case DOWN:
-		state->y++;
+		state->pos.y++;
 		break;
 	case LEFT:
-		state->x--;
+		state->pos.x--;
 		break;
 	case RIGHT:
-		state->x++;
+		state->pos.x++;
 		break;
 	case HOLD:
-		return FALSE;
+		return false;
 	default:
 		break;
 	}
@@ -557,27 +571,27 @@ int update_position(GameState *state, int max_x, int max_y)
 	if (config->open_bounds_flag)
 	{
 		// If you hit the outer bounds you'll end up on the other side
-		if (state->y < 0)
+		if (state->pos.y < 0)
 		{
-			state->y = max_y - 1;
+			state->pos.y = max_coord.y - 1;
 		}
-		else if (state->y >= max_y)
+		else if (state->pos.y >= max_coord.y)
 		{
-			state->y = 0;
+			state->pos.y = 0;
 		}
-		else if (state->x < 0)
+		else if (state->pos.x < 0)
 		{
-			state->x = max_x - 1;
+			state->pos.x = max_coord.x - 1;
 		}
-		else if (state->x >= max_x)
+		else if (state->pos.x >= max_coord.x)
 		{
-			state->x = 0;
+			state->pos.x = 0;
 		}
-		return FALSE;
+		return false;
 	}
 	else
 	{
-		return (state->y < 0) || (state->x < 0) || (state->y >= max_y) || (state->x >= max_x);
+		return (state->pos.y < 0) || (state->pos.x < 0) || (state->pos.y >= max_coord.y) || (state->pos.x >= max_coord.x);
 	}
 }
 
@@ -636,36 +650,34 @@ void paint_objects(WINDOW *game_win, GameState *state)
 {
 	// Clear last cell
 	wattrset(game_win, A_NORMAL);
-	mvwaddch(game_win, state->last->y, state->last->x, ' ');
+	mvwaddch(game_win, state->last->coord.y, state->last->coord.x, ' ');
 	// Paint food
 	wattrset(game_win, COLOR_PAIR((state->superfood_counter == 0) ? 4 : 3) | A_BOLD);
-	mvwaddch(game_win, state->food_y, state->food_x, '0');
+	mvwaddch(game_win, state->food_coord.y, state->food_coord.x, '0');
 	// Paint the snake in the specified color
 	wattrset(game_win, COLOR_PAIR(config->snake_color) | A_BOLD);
 	int snake_char = snake_char_from_direction(state->direction, state->old_direction);
 	if (snake_char)
 	{
-		mvwaddch(game_win, state->old_y, state->old_x, snake_char);
+		mvwaddch(game_win, state->old_pos.y, state->old_pos.x, snake_char);
 	}
 	// Draw head
-	mvwaddch(game_win, state->y, state->x, 'X');
+	mvwaddch(game_win, state->pos.y, state->pos.x, 'X');
 }
 
 UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state)
 {
 	// Init max coordinates in relation to game window
-	int max_x = getmaxx(game_win);
-	int max_y = getmaxy(game_win);
+	Coord max_coord = get_max_coords(game_win);
 
 	// Save old coordinates
-	state->old_x = state->x;
-	state->old_y = state->y;
+	state->old_pos = state->pos;
 
 	// Update position and check if outer bounds were hit
-	int wall_hit = update_position(state, max_x, max_y);
+	bool wall_hit = update_position(state, max_coord);
 
 	// The snake hits something
-	if (wall_hit || is_on_obstacle(state->head, state->x, state->y) || is_on_obstacle(state->wall, state->x, state->y))
+	if (wall_hit || is_on_obstacle(state->head, state->pos.x, state->pos.y) || is_on_obstacle(state->wall, state->pos.x, state->pos.y))
 	{
 		if (state->grace_frames == 0)
 		{
@@ -677,8 +689,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 			// We still have grace frames so we reset the coordinate and
 			// let the player change the direction
 			state->grace_frames--;
-			state->x = state->old_x;
-			state->y = state->old_y;
+			state->pos = state->old_pos;
 			return GRACE;
 		}
 	}
@@ -688,14 +699,13 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 
 	// Add new head to snake
 	LinkedCell *new_cell = malloc(sizeof(LinkedCell));
-	new_cell->x = state->x;
-	new_cell->y = state->y;
+	new_cell->coord = state->pos;
 	new_cell->last = state->head;
 	state->head->next = new_cell;
 	state->head = new_cell;
 
 	// Head hits the food
-	if ((state->x == state->food_x) && (state->y == state->food_y))
+	if ((state->pos.x == state->food_coord.x) && (state->pos.y == state->food_coord.y))
 	{
 		// Let the snake grow and change the speed
 		state->growing += state->superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
@@ -706,7 +716,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 		state->points += (state->points_counter + state->length + (STARTING_SPEED - state->speed) * 5) * (state->superfood_counter == 0 ? 5 : 1);
 		state->points_counter = POINTS_COUNTER_VALUE;
 		state->superfood_counter = (state->superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : state->superfood_counter - 1;
-		new_random_coordinates(state->head, state->wall, &state->food_x, &state->food_y, max_x, max_y);
+		new_random_coordinates(state->head, state->wall, &state->food_coord, max_coord);
 	}
 
 	// If the snake is not growing...
@@ -736,8 +746,10 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	return CONTINUE;
 }
 
-LinkedCell *init_wall(int max_x, int max_y)
+LinkedCell *init_wall(Coord max_coord)
 {
+	int max_x = max_coord.x;
+	int max_y = max_coord.y;
 	// Creating walls (all walls are referenced by one pointer)
 	LinkedCell *wall = NULL;
 	if (config->wall_flag)
@@ -786,16 +798,15 @@ LinkedCell *init_wall(int max_x, int max_y)
 	return wall;
 }
 
-GameState init_state(int max_x, int max_y)
+GameState init_state(Coord max_coord)
 {
 	// Init gamestate
 	GameState state;
 	state.points = 0;
 	state.speed = STARTING_SPEED;
-	state.x = max_x / 2;
-	state.y = max_y / 2;
-	state.old_x = state.x;
-	state.old_y = state.y;
+	state.pos.x = max_coord.x / 2;
+	state.pos.y = max_coord.y / 2;
+	state.old_pos = state.pos;
 	state.points_counter = POINTS_COUNTER_VALUE;
 	state.length = STARTING_LENGTH;
 	state.growing = GROW_FACTOR;
@@ -803,20 +814,19 @@ GameState init_state(int max_x, int max_y)
 	state.direction = HOLD;
 	state.old_direction = HOLD;
 	state.superfood_counter = SUPERFOOD_COUNTER_VALUE;
-	state.food_x = 0;
-	state.food_y = 0;
+	state.food_coord.x = 0;
+	state.food_coord.y = 0;
 
 	// Create first cell for the snake
 	LinkedCell *head = malloc(sizeof(LinkedCell));
-	head->x = state.x;
-	head->y = state.y;
+	head->coord = state.pos;
 	head->last = NULL;
 	head->next = NULL;
 	state.head = head;
 	state.last = head;
 
 	// Init wall
-	state.wall = init_wall(max_x, max_y);
+	state.wall = init_wall(max_coord);
 
 	return state;
 }
@@ -836,16 +846,15 @@ GameResult play_round(void)
 	WINDOW *status_win = subwin(stdscr, 4, global_max_x, global_max_y - 4, 0);
 
 	// Init max coordinates in relation to game window
-	int max_x = getmaxx(game_win);
-	int max_y = getmaxy(game_win);
+	Coord max_coord = get_max_coords(game_win);
 
 	// Init gamestate
-	GameState state = init_state(max_x, max_y);
+	GameState state = init_state(max_coord);
 
 	// Init result
 	GameResult result;
-	result.lost = FALSE;
-	result.should_repeat = FALSE;
+	result.lost = false;
+	result.should_repeat = false;
 
 	// Set initial timeout
 	timeout(state.speed); // The timeout for getch() makes up the game speed
@@ -863,16 +872,16 @@ GameResult play_round(void)
 		do
 		{
 			tmp_cell1 = tmp_cell2;
-			mvwaddch(game_win, tmp_cell1->y, tmp_cell1->x, ACS_CKBOARD);
+			mvwaddch(game_win, tmp_cell1->coord.y, tmp_cell1->coord.x, ACS_CKBOARD);
 			tmp_cell2 = tmp_cell1->last;
 		} while (tmp_cell2 != NULL);
 	}
 
 	// Init food coordinates
-	new_random_coordinates(state.head, state.wall, &state.food_x, &state.food_y, max_x, max_y);
+	new_random_coordinates(state.head, state.wall, &state.food_coord, max_coord);
 
 	// Game-Loop
-	while (TRUE)
+	while (true)
 	{
 		// Paint snake head and food
 		paint_objects(game_win, &state);
@@ -893,7 +902,7 @@ GameResult play_round(void)
 		}
 		else if (interact == RESTART)
 		{
-			result.should_repeat = TRUE;
+			result.should_repeat = true;
 			break;
 		}
 		else if (interact == QUIT)
@@ -911,7 +920,7 @@ GameResult play_round(void)
 		UpdateResult res = update_state(game_win, status_win, &state);
 		if (res == GAME_OVER)
 		{
-			result.lost = TRUE;
+			result.lost = true;
 			break;
 		}
 	}
@@ -962,7 +971,7 @@ GameResult play_round(void)
 
 void play_game(void)
 {
-	while (TRUE)
+	while (true)
 	{
 		GameResult result = play_round();
 		if (!result.should_repeat)
@@ -1136,7 +1145,7 @@ show:
 void parse_arguments(int argc, char **argv)
 {
 	int arg, int_arg;
-	int vim_flag = FALSE;
+	int vim_flag = false;
 	int option_index = 0;
 	char *string_arg;
 
@@ -1148,7 +1157,7 @@ void parse_arguments(int argc, char **argv)
 			{"ignore-savefile", no_argument, NULL, 'i'},
 			{"open-bound", no_argument, NULL, 'o'},
 			{"skip-title", no_argument, NULL, 's'},
-			{"vim", no_argument, &vim_flag, TRUE},
+			{"vim", no_argument, &vim_flag, true},
 			{"color", required_argument, NULL, 'c'},
 			{"walls", required_argument, NULL, 'w'},
 			{"filepath", required_argument, NULL, 'f'},
@@ -1168,13 +1177,13 @@ void parse_arguments(int argc, char **argv)
 			}
 			goto help_text;
 		case 'o':
-			config->open_bounds_flag = TRUE;
+			config->open_bounds_flag = true;
 			break;
 		case 's':
-			config->skip_flag = TRUE;
+			config->skip_flag = true;
 			break;
 		case 'i':
-			config->ignore_flag = TRUE;
+			config->ignore_flag = true;
 			break;
 		case 'f':
 			if (config->save_file_path != NULL)
@@ -1186,13 +1195,13 @@ void parse_arguments(int argc, char **argv)
 			config->save_file_path = string_arg;
 			break;
 		case 'r':
-			config->remove_flag = TRUE;
+			config->remove_flag = true;
 			break;
 		case 'w':
 			int_arg = atoi(optarg);
 			if (in_range(int_arg, 1, 5))
 			{
-				config->wall_flag = TRUE;
+				config->wall_flag = true;
 				config->wall_pattern = int_arg;
 				break;
 			}
@@ -1292,10 +1301,10 @@ int main(int argc, char **argv)
 	init_pair(8, COLOR_BLACK, COLOR_YELLOW);
 	init_pair(9, COLOR_BLACK, COLOR_BLUE);
 	bkgd(COLOR_PAIR(1));
-	curs_set(FALSE);
+	curs_set(false);
 	noecho();
 	cbreak();
-	keypad(stdscr, TRUE);
+	keypad(stdscr, true);
 
 	// Get screen dimensions
 	int max_x = getmaxx(stdscr);
@@ -1307,11 +1316,11 @@ int main(int argc, char **argv)
 	// correctly so we have to skip the title.
 	if ((max_x < 64) || (max_y < 19))
 	{
-		config->skip_flag = TRUE;
+		config->skip_flag = true;
 	}
 
 	// Endless loop until the user quits the game
-	while (TRUE)
+	while (true)
 	{
 		if (config->skip_flag)
 		{
