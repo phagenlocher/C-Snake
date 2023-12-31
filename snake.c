@@ -138,10 +138,11 @@ char *init_file_path(void)
 void init_configuration(void)
 {
 	config = malloc(sizeof(GameConfiguration));
+	config->save_file_path = init_file_path();
 	config->max_speed = STD_MAX_SPEED;
 	config->highscore = 0;
+	config->ignore_flag = FALSE;
 	config->remove_flag = FALSE;
-	config->custom_flag = FALSE;
 	config->open_bounds_flag = FALSE;
 	config->skip_flag = FALSE;
 	config->wall_flag = FALSE;
@@ -151,10 +152,6 @@ void init_configuration(void)
 	config->down_key = KEY_DOWN;
 	config->left_key = KEY_LEFT;
 	config->right_key = KEY_RIGHT;
-
-	char *save_file_path = init_file_path();
-	config->save_file_path = save_file_path;
-	config->ignore_flag = save_file_path == NULL ? TRUE : FALSE;
 }
 
 // Write a score to the score file, reading the file path from the global config
@@ -198,6 +195,13 @@ int read_score_file(void)
 	// If the file path was not initialized we also return
 	if (config->save_file_path == NULL)
 		return SUCCESS;
+
+	// File doesn't exist
+	if (access(config->save_file_path, F_OK) != 0)
+	{
+		config->highscore = 0;
+		return SUCCESS;
+	}
 
 	// Memory for file contents
 	char content[FILE_LENGTH];
@@ -1131,9 +1135,10 @@ show:
 
 void parse_arguments(int argc, char **argv)
 {
-	int arg, int_arg, vim_flag, option_index;
-	option_index = 0;
-	vim_flag = FALSE;
+	int arg, int_arg;
+	int vim_flag = FALSE;
+	int option_index = 0;
+	char *string_arg;
 
 	const struct option long_opts[] =
 		{
@@ -1172,7 +1177,13 @@ void parse_arguments(int argc, char **argv)
 			config->ignore_flag = TRUE;
 			break;
 		case 'f':
-			config->custom_flag = TRUE;
+			if (config->save_file_path != NULL)
+			{
+				free(config->save_file_path);
+			}
+			string_arg = calloc(strlen(optarg) + 1, sizeof(char));
+			strcpy(string_arg, optarg);
+			config->save_file_path = string_arg;
 			break;
 		case 'r':
 			config->remove_flag = TRUE;
