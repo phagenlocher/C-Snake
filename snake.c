@@ -27,6 +27,7 @@
 #define SPEED_FACTOR 2
 #define GRACE_FRAMES 3
 #define VERSION "0.57.1 (Beta)"
+#define CC_END_YEAR "2024"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 // 19 characters are needed to display the max number for long long
 
@@ -1213,7 +1214,7 @@ void parse_arguments(int argc, char **argv)
 			printf(" Shift+R\n\tRestart Round (can be used to resize the game after window size has changed)\n");
 			exit(0);
 		case 'v':
-			printf("C-Snake %s\nCopyright (c) 2015-2023 Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION);
+			printf("C-Snake %s\nCopyright (c) 2015-%s Philipp Hagenlocher\nLicense: MIT\nCheck source for full license text.\nThere is no warranty.\n", VERSION, CC_END_YEAR);
 			exit(0);
 		}
 	}
