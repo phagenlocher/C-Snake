@@ -88,8 +88,8 @@ typedef struct GameState
 
 typedef struct GameResult
 {
-	int lost;
-	int should_repeat;
+	bool lost;
+	bool should_repeat;
 } GameResult;
 
 typedef struct GameConfiguration
@@ -97,9 +97,12 @@ typedef struct GameConfiguration
 	char *save_file_path;
 	unsigned int max_speed;
 	long long highscore;
-	int open_bounds_flag, skip_flag, wall_flag;
-	int wall_pattern;
-	int ignore_flag, remove_flag, custom_flag;
+	bool open_bounds_flag;
+	bool skip_flag;
+	bool wall_flag;
+	bool ignore_flag;
+	bool remove_flag;
+	short wall_pattern;
 	int up_key, down_key, left_key, right_key;
 	int snake_color;
 } GameConfiguration;
