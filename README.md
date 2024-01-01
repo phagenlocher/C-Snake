@@ -17,17 +17,17 @@ Rules:
 * The faster you eat the fruit, the more points you'll get!
 
 Arguments:
-* **--open-bounds, -o** will make the outer bounds open so you can exit the screen and come out on the other side
-* **--walls <0-5>, -w <0-5>** activates the usage of walls within the level. *1-5* are predefined wall patterns and *0* are randomly created walls.
-* **--color <1-5>, -c <1-5>** changes the color of the snake
-* **--skip-title -s** skips the title screen
-* **--remove-savefile, -r** removes the savefile
-* **--ignore-savefile, -i** will ignore the savefile
-* **--filepath path, -f path** will use *path* as the savefile
-* **--vim** changes controls with arrow keys to H, J, K and L
-* **--maximum-speed** changes the maximum speed
-* **--help, -h** displays help information
-* **--version, -v** displays information about the version and license
+* `--open-bounds`, `-o` will make the outer bounds open so you can exit the screen and come out on the other side
+* `--walls <0-5>`, `-w <0-5>` activates the usage of walls within the level. *1-5* are predefined wall patterns and *0* are randomly created walls.
+* `--color <1-5>`, `-c <1-5>` changes the color of the snake
+* `--skip-title`, `-s` skips the title screen
+* `--remove-savefile`, `-r` removes the savefile
+* `--ignore-savefile`, `-i` will ignore the savefile
+* `--filepath path`, `-f path` will use *path* as the savefile
+* `--vim` changes controls with arrow keys to H, J, K and L
+* `--maximum-speed` changes the maximum speed
+* `--help`, `-h` displays help information
+* `--version`, `-v` displays information about the version and license
 
 ## Requirements / Dependencies
 * gcc
@@ -61,13 +61,4 @@ make TARGET=<New Name> install
 ```
 Be sure to use the same target name for the uninstall.
 
-## Screenshots
 
-### XTerm
-![Screenshot 1](http://home.in.tum.de/~hagenloc/CSNAKE/screen1.png)
-### Terminator
-![Screenshot 2](http://home.in.tum.de/~hagenloc/CSNAKE/screen2.png)
-### Debian TTY in Virtualbox
-![Screenshot 3](http://home.in.tum.de/~hagenloc/CSNAKE/screen3.png)
-### cool-retro-term
-![Screenshot 4](http://home.in.tum.de/~hagenloc/CSNAKE/screen4.png)
