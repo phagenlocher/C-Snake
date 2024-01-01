@@ -648,9 +648,6 @@ UserInteraction handle_input(GameState *state)
 
 void paint_objects(WINDOW *game_win, GameState *state)
 {
-	// Clear last cell
-	wattrset(game_win, A_NORMAL);
-	mvwaddch(game_win, state->last->coord.y, state->last->coord.x, ' ');
 	// Paint food
 	wattrset(game_win, COLOR_PAIR((state->superfood_counter == 0) ? 4 : 3) | A_BOLD);
 	mvwaddch(game_win, state->food_coord.y, state->food_coord.x, '0');
@@ -677,7 +674,9 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	bool wall_hit = update_position(state, max_coord);
 
 	// The snake hits something
-	if (wall_hit || is_on_obstacle(state->head, state->pos.x, state->pos.y) || is_on_obstacle(state->wall, state->pos.x, state->pos.y))
+	if (wall_hit ||
+		is_on_obstacle(state->head, state->pos.x, state->pos.y) ||
+		is_on_obstacle(state->wall, state->pos.x, state->pos.y))
 	{
 		if (state->grace_frames == 0)
 		{
@@ -705,23 +704,32 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	state->head = new_cell;
 
 	// Head hits the food
-	if ((state->pos.x == state->food_coord.x) && (state->pos.y == state->food_coord.y))
+	if ((state->pos.x == state->food_coord.x) &&
+		(state->pos.y == state->food_coord.y))
 	{
 		// Let the snake grow and change the speed
-		state->growing += state->superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
+		state->growing +=
+			state->superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
 		if (state->speed > config->max_speed)
 		{
 			state->speed -= SPEED_FACTOR;
 		}
-		state->points += (state->points_counter + state->length + (STARTING_SPEED - state->speed) * 5) * (state->superfood_counter == 0 ? 5 : 1);
+		state->points +=
+			(state->points_counter +
+			 state->length + (STARTING_SPEED - state->speed) * 5) *
+			(state->superfood_counter == 0 ? 5 : 1);
 		state->points_counter = POINTS_COUNTER_VALUE;
-		state->superfood_counter = (state->superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : state->superfood_counter - 1;
+		state->superfood_counter =
+			(state->superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : state->superfood_counter - 1;
 		new_random_coordinates(state->head, state->wall, &state->food_coord, max_coord);
 	}
 
 	// If the snake is not growing...
 	if (state->growing == 0)
 	{
+		// Clear last cell
+		wattrset(game_win, A_NORMAL);
+		mvwaddch(game_win, state->last->coord.y, state->last->coord.x, ' ');
 		// ...free the memory for this cell
 		LinkedCell *new_last;
 		state->last->next->last = NULL;
@@ -808,8 +816,8 @@ GameState init_state(Coord max_coord)
 	state.pos.y = max_coord.y / 2;
 	state.old_pos = state.pos;
 	state.points_counter = POINTS_COUNTER_VALUE;
-	state.length = STARTING_LENGTH;
-	state.growing = GROW_FACTOR;
+	state.length = 1;
+	state.growing = STARTING_LENGTH - 1;
 	state.grace_frames = GRACE_FRAMES;
 	state.direction = HOLD;
 	state.old_direction = HOLD;
@@ -898,7 +906,6 @@ GameResult play_round(void)
 		{
 			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
 			pause_game(status_win, "--- PAUSED ---", 0);
-			continue;
 		}
 		else if (interact == RESTART)
 		{
