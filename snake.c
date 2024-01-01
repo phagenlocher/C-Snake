@@ -33,26 +33,39 @@
 
 typedef enum Direction
 {
+	// No direction, standing still
 	HOLD,
+	// Negative y direction
 	UP,
+	// Positive y direction
 	DOWN,
+	// Positive x direction
 	RIGHT,
+	// Negative x direction
 	LEFT
 } Direction;
 
 typedef enum UserInteraction
 {
+	// No interaction by the user
 	NONE,
+	// Request to pause the game
 	PAUSE,
+	// Request to restart the round
 	RESTART,
+	// Request to quit the program
 	QUIT,
+	// Direction button pressed
 	DIRECTION
 } UserInteraction;
 
 typedef enum UpdateResult
 {
+	// Player was saved by a grace frame
 	GRACE,
+	// The round ends in a game over
 	GAME_OVER,
+	// The round may continue
 	CONTINUE
 } UpdateResult;
 
@@ -64,42 +77,73 @@ typedef struct Coord
 
 typedef struct LinkedCell
 {
+	// Coordinate for the cell
 	Coord coord;
-	struct LinkedCell *last;
+	// The previous cell in the linked list
+	// `this->prev->next` should point to `this`
+	struct LinkedCell *prev;
+	// The next cell in the linked list
+	// `this->next->prev` should point to `this`
 	struct LinkedCell *next;
 } LinkedCell;
 
 typedef struct GameState
 {
+	// Current score
 	long long points;
+	// Current direction
 	Direction direction;
+	// Previous direction from the last update
 	Direction old_direction;
+	// Current speed
 	int speed;
+	// Current position of the snake head
 	Coord pos;
+	// Position of the snake head from the last update
 	Coord old_pos;
+	// Current "bonus" points that would be added if food was hit
 	int points_counter;
+	// Current length of the snake
 	int length;
+	// Current amount of cells the snake still needs to grow
 	int growing;
+	// Amount of available update cycles that
 	int grace_frames;
+	// Amount of update cycles needed until the food becomes a super food
 	int superfood_counter;
+	// Current position of the food
 	Coord food_coord;
+	// Head of the snake
 	LinkedCell *head;
+	// Last cell of the snake
 	LinkedCell *last;
+	// Points to all walls as a single linked list
 	LinkedCell *wall;
 } GameState;
 
 typedef struct GameConfiguration
 {
+	// Path to the savefile
 	char *save_file_path;
+	// Maximum possible speed
 	unsigned int max_speed;
+	// Highscore either read from savefile or updated from last game round
 	long long highscore;
+	// Specifies whether outer walls should be open
 	bool open_bounds_flag;
+	// Specifies whether menus should be skipped
 	bool skip_flag;
+	// Specifies whether a wall pattern (specified by `wall_pattern`) should be used
 	bool wall_flag;
+	// Specifies whether the savefile should be ignored
 	bool ignore_flag;
+	// Specifies whether the savefile should be removed
 	bool remove_flag;
+	// Selects a predefined pattern (if `wall_flag` is `true`)
 	short wall_pattern;
+	// Key-code used for direction control
 	int up_key, down_key, left_key, right_key;
+	// Colorpair index for the color to print the snake in
 	int snake_color;
 } GameConfiguration;
 
@@ -362,7 +406,7 @@ bool is_on_obstacle(LinkedCell *test_cell, const int x, const int y)
 			return true;
 
 		// Check next cell
-		test_cell = test_cell->last;
+		test_cell = test_cell->prev;
 	} while (test_cell != NULL);
 
 	// No cell found
@@ -408,7 +452,7 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 
 	// Connect the new wall to an old one
 	// If last_cell is NULL the list ends here
-	wall->last = last_cell;
+	wall->prev = last_cell;
 
 	// Based on the direction build a wall from start to end
 	// and put it infrnt of the old list
@@ -419,7 +463,7 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		{
 			new_wall = malloc(sizeof(LinkedCell));
 			new_wall->coord = coord(constant, i);
-			new_wall->last = wall;
+			new_wall->prev = wall;
 			wall = new_wall;
 		}
 		break;
@@ -428,7 +472,7 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		{
 			new_wall = malloc(sizeof(LinkedCell));
 			new_wall->coord = coord(i, constant);
-			new_wall->last = wall;
+			new_wall->prev = wall;
 			wall = new_wall;
 		}
 		break;
@@ -437,7 +481,7 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		{
 			new_wall = malloc(sizeof(LinkedCell));
 			new_wall->coord = coord(constant, i);
-			new_wall->last = wall;
+			new_wall->prev = wall;
 			wall = new_wall;
 		}
 		break;
@@ -446,7 +490,7 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		{
 			new_wall = malloc(sizeof(LinkedCell));
 			new_wall->coord = coord(i, constant);
-			new_wall->last = wall;
+			new_wall->prev = wall;
 			wall = new_wall;
 		}
 		break;
@@ -467,7 +511,7 @@ void free_linked_list(LinkedCell *cell)
 	LinkedCell *tmp_cell;
 	do
 	{
-		tmp_cell = cell->last;
+		tmp_cell = cell->prev;
 		free(cell);
 		cell = tmp_cell;
 	} while (cell != NULL);
@@ -691,7 +735,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	// Add new head to snake
 	LinkedCell *new_cell = malloc(sizeof(LinkedCell));
 	new_cell->coord = state->pos;
-	new_cell->last = state->head;
+	new_cell->prev = state->head;
 	state->head->next = new_cell;
 	state->head = new_cell;
 
@@ -724,7 +768,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 		mvwaddch(game_win, state->last->coord.y, state->last->coord.x, ' ');
 		// ...free the memory for this cell
 		LinkedCell *new_last;
-		state->last->next->last = NULL;
+		state->last->next->prev = NULL;
 		new_last = state->last->next;
 		free(state->last);
 		state->last = new_last;
@@ -820,7 +864,7 @@ GameState init_state(Coord max_coord)
 	// Create first cell for the snake
 	LinkedCell *head = malloc(sizeof(LinkedCell));
 	head->coord = state.pos;
-	head->last = NULL;
+	head->prev = NULL;
 	head->next = NULL;
 	state.head = head;
 	state.last = head;
@@ -873,7 +917,7 @@ bool play_round(void)
 		{
 			tmp_cell1 = tmp_cell2;
 			mvwaddch(game_win, tmp_cell1->coord.y, tmp_cell1->coord.x, ACS_CKBOARD);
-			tmp_cell2 = tmp_cell1->last;
+			tmp_cell2 = tmp_cell1->prev;
 		} while (tmp_cell2 != NULL);
 	}
 
