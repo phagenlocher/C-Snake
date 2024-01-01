@@ -471,7 +471,7 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		for (i = start + 1; i < end; i++)
 		{
 			new_wall = malloc(sizeof(LinkedCell));
-			new_wall->coord = coord(i, constant);
+			new_wall->coord = coord(constant, i);
 			new_wall->prev = wall;
 			wall = new_wall;
 		}
@@ -480,7 +480,7 @@ LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedC
 		for (i = start - 1; i > end; i--)
 		{
 			new_wall = malloc(sizeof(LinkedCell));
-			new_wall->coord = coord(constant, i);
+			new_wall->coord = coord(i, constant);
 			new_wall->prev = wall;
 			wall = new_wall;
 		}
