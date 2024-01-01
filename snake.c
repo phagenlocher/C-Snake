@@ -90,12 +90,6 @@ typedef struct GameState
 	LinkedCell *wall;
 } GameState;
 
-typedef struct GameResult
-{
-	bool lost;
-	bool should_repeat;
-} GameResult;
-
 typedef struct GameConfiguration
 {
 	char *save_file_path;
@@ -839,7 +833,10 @@ GameState init_state(Coord max_coord)
 	return state;
 }
 
-GameResult play_round(void)
+// Plays one round of the game. Can be interrupted by the user.
+// Returns `true` if a reset was requested, thus another round
+// should start without showing the menu.
+bool play_round(void)
 {
 	// Init max coordinates
 	int global_max_x = getmaxx(stdscr);
@@ -858,11 +855,8 @@ GameResult play_round(void)
 
 	// Init gamestate
 	GameState state = init_state(max_coord);
-
-	// Init result
-	GameResult result;
-	result.lost = false;
-	result.should_repeat = false;
+	bool did_loose = false;
+	bool should_repeat = false;
 
 	// Set initial timeout
 	timeout(state.speed); // The timeout for getch() makes up the game speed
@@ -909,7 +903,7 @@ GameResult play_round(void)
 		}
 		else if (interact == RESTART)
 		{
-			result.should_repeat = true;
+			should_repeat = true;
 			break;
 		}
 		else if (interact == QUIT)
@@ -927,7 +921,7 @@ GameResult play_round(void)
 		UpdateResult res = update_state(game_win, status_win, &state);
 		if (res == GAME_OVER)
 		{
-			result.lost = true;
+			did_loose = true;
 			break;
 		}
 	}
@@ -953,7 +947,7 @@ GameResult play_round(void)
 		}
 	}
 
-	if (result.lost)
+	if (did_loose)
 	{
 		wattrset(status_win, COLOR_PAIR(3) | A_BOLD);
 		pause_game(status_win, "--- GAME OVER ---", 2);
@@ -973,15 +967,15 @@ GameResult play_round(void)
 	clear();
 	refresh();
 
-	return result;
+	return should_repeat;
 }
 
 void play_game(void)
 {
 	while (true)
 	{
-		GameResult result = play_round();
-		if (!result.should_repeat)
+		bool should_repeat = play_round();
+		if (!should_repeat)
 			return;
 	}
 }
