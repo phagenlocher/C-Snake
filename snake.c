@@ -8,8 +8,6 @@
 #include <time.h>
 #include <pwd.h>
 
-#define ERROR 1
-#define SUCCESS 0
 #define clean_exit(code) \
 	endwin();            \
 	exit(code);
@@ -153,14 +151,14 @@ void init_configuration(void)
 }
 
 // Write a score to the score file, reading the file path from the global config
-// Returns a non-zero value on error
-int write_score_file(long long score)
+// Returns `false` on error, `true` otherwise
+bool write_score_file(long long score)
 {
 	// If we ignore the score file we return
 	// If the file path was not initialized we also return
 	if (config->ignore_flag || config->save_file_path == NULL)
 	{
-		return SUCCESS;
+		return true;
 	}
 
 	// Memory for the string representation of the score
@@ -173,32 +171,32 @@ int write_score_file(long long score)
 	FILE *file = fopen(config->save_file_path, "w");
 	if (file == NULL)
 	{
-		return ERROR;
+		return false;
 	}
 
 	// Write score to file and close it
 	fputs(score_str, file);
 	fclose(file);
-	return SUCCESS;
+	return true;
 }
 
 // Read the highscore from the score file, reading the file path from the global config
-// Returns a non-zero value on error
-int read_score_file(void)
+// Returns `false` on error, `true` otherwise
+bool read_score_file(void)
 {
 	// If we ignore the score file we return
 	if (config->ignore_flag)
-		return SUCCESS;
+		return true;
 
 	// If the file path was not initialized we also return
 	if (config->save_file_path == NULL)
-		return SUCCESS;
+		return true;
 
 	// File doesn't exist
 	if (access(config->save_file_path, F_OK) != 0)
 	{
 		config->highscore = 0;
-		return SUCCESS;
+		return true;
 	}
 
 	// Memory for file contents
@@ -209,7 +207,7 @@ int read_score_file(void)
 	if (file == NULL)
 	{
 		config->highscore = 0;
-		return ERROR;
+		return false;
 	}
 
 	// Read file contents and interpret the score
@@ -220,7 +218,7 @@ int read_score_file(void)
 
 	// Close the file
 	fclose(file);
-	return SUCCESS;
+	return true;
 }
 
 inline Coord coord(int x, int y)
@@ -933,7 +931,7 @@ bool play_round(void)
 		config->highscore = state.points;
 
 		// Write highscore to local file
-		if (write_score_file(state.points) == SUCCESS)
+		if (write_score_file(state.points))
 		{
 			wattrset(status_win, COLOR_PAIR(2) | A_BOLD);
 			pause_game(status_win, "--- NEW HIGHSCORE ---", 2);
@@ -1275,7 +1273,7 @@ int main(int argc, char **argv)
 		else
 		{
 			// Read local highscore
-			if (read_score_file() == ERROR)
+			if (!read_score_file())
 			{
 				fprintf(stderr, "Unable to read savefile at %s\n", config->save_file_path);
 				fprintf(stderr, "If the error persists try using the --ignore-savefile flag!\n");
