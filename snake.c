@@ -1,3 +1,7 @@
+// we are using clocks from POSIX
+// see here: https://www.gnu.org/software/libc/manual/html_node/Feature-Test-Macros.html#index-_005fPOSIX_005fC_005fSOURCE
+#define _POSIX_C_SOURCE 200809L
+
 #include <ncurses.h>
 #include <stdbool.h>
 #include <limits.h>
@@ -12,21 +16,24 @@
 	endwin();            \
 	exit(code);
 #define in_range(x, min, max) (x >= min) && (x <= max)
+#define NANOSECS_IN_SEC 1000000000
+#define NANOSECS_IN_MILLISEC 1000000
+#define TARGET_FRAME_TIME 8333333 // 120 frames per second (NANOSECS_IN_SEC / 120)
 
 // Constants important for gameplay
-#define STARTING_SPEED 150
+#define STARTING_WAIT_TIME 80
+#define WAIT_TIME_DECREMENT 1
+#define MINIMUM_WAIT_TIME 5
 #define STARTING_LENGTH 5
 #define POINTS_COUNTER_VALUE 1000
 #define SUPERFOOD_COUNTER_VALUE 10
 #define MIN_POINTS 100
-#define STD_MAX_SPEED 50
 #define GROW_FACTOR 10
 #define SUPERFOOD_GROW_FACTOR 15
-#define SPEED_FACTOR 2
 #define GRACE_FRAMES 3
 
 // Misc. constants
-#define VERSION "0.58.0 (Beta)"
+#define VERSION "0.60.0 (Beta)"
 #define CC_END_YEAR "2024"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 // 19 characters are needed to display the max number for long long
@@ -56,7 +63,10 @@ typedef enum UserInteraction
 	// Request to quit the program
 	QUIT,
 	// Direction button pressed
-	DIRECTION
+	DIRECTION_LEFT,
+	DIRECTION_RIGHT,
+	DIRECTION_UP,
+	DIRECTION_DOWN
 } UserInteraction;
 
 typedef enum UpdateResult
@@ -66,7 +76,17 @@ typedef enum UpdateResult
 	// The round ends in a game over
 	GAME_OVER,
 	// The round may continue
-	CONTINUE
+	CONTINUE,
+	// Delayed frame
+	DELAY,
+	// Game should pause
+	PAUSE_GAME,
+	// Game should be quit
+	QUIT_GAME,
+	// Game should restart
+	RESTART_GAME,
+	// No update to be made
+	NO_UPDATE
 } UpdateResult;
 
 typedef struct Coord
@@ -87,6 +107,14 @@ typedef struct LinkedCell
 	struct LinkedCell *next;
 } LinkedCell;
 
+typedef struct InputFIFO
+{
+	// The first input made
+	UserInteraction input;
+	// The next input made
+	struct InputFIFO *next;
+} InputFIFO;
+
 typedef struct GameState
 {
 	// Current score
@@ -95,8 +123,10 @@ typedef struct GameState
 	Direction direction;
 	// Previous direction from the last update
 	Direction old_direction;
-	// Current speed
-	int speed;
+	// Time (in ms) for an update to happen (determines game speed)
+	int wait_time;
+	// Current delay for updating state
+	long frame_delay;
 	// Current position of the snake head
 	Coord pos;
 	// Position of the snake head from the last update
@@ -119,14 +149,14 @@ typedef struct GameState
 	LinkedCell *last;
 	// Points to all walls as a single linked list
 	LinkedCell *wall;
+	// All inputs made by the user to be processed
+	InputFIFO *input_queue;
 } GameState;
 
 typedef struct GameConfiguration
 {
 	// Path to the savefile
 	char *save_file_path;
-	// Maximum possible speed
-	unsigned int max_speed;
 	// Highscore either read from savefile or updated from last game round
 	long long highscore;
 	// Specifies whether outer walls should be open
@@ -179,7 +209,6 @@ void init_configuration(void)
 {
 	config = malloc(sizeof(GameConfiguration));
 	config->save_file_path = init_file_path();
-	config->max_speed = STD_MAX_SPEED;
 	config->highscore = 0;
 	config->ignore_flag = false;
 	config->remove_flag = false;
@@ -281,6 +310,40 @@ inline Coord get_max_coords(WINDOW *win)
 inline size_t half_len(const char string[])
 {
 	return strlen(string) / 2;
+}
+
+// Subtracts `t2` from `t1` assuming that `t1` > `t2`
+struct timespec subtract_timespec(struct timespec *t1, struct timespec *t2)
+{
+	struct timespec diff;
+	diff.tv_sec = t1->tv_sec - t2->tv_sec;
+	long new_nsec = t1->tv_nsec - t2->tv_nsec;
+	if (new_nsec < 0)
+	{
+		diff.tv_sec--;
+		diff.tv_nsec = NANOSECS_IN_SEC + new_nsec;
+	}
+	else
+	{
+		diff.tv_nsec = new_nsec;
+	}
+	return diff;
+}
+
+void delay_frame(struct timespec *start_timer, struct timespec *end_timer)
+{
+	struct timespec wait_time, rem, delta = subtract_timespec(end_timer, start_timer);
+	if (delta.tv_sec == 0)
+	{
+		long nano_delay = TARGET_FRAME_TIME - delta.tv_nsec;
+		wait_time.tv_sec = 0;
+		wait_time.tv_nsec = nano_delay;
+		nanosleep(&wait_time, &rem);
+	}
+	else
+	{
+		// We are already under 1 frame per second, no reason to delay!
+	}
 }
 
 void print_centered(WINDOW *window, int y, const char string[])
@@ -517,6 +580,22 @@ void free_linked_list(LinkedCell *cell)
 	} while (cell != NULL);
 }
 
+void free_queue(InputFIFO *queue)
+{
+	// Nothing valid to free
+	if (queue == NULL)
+		return;
+
+	// Free queue
+	InputFIFO *tmp_queue;
+	do
+	{
+		tmp_queue = queue->next;
+		free(queue);
+		queue = tmp_queue;
+	} while (queue != NULL);
+}
+
 int snake_char_from_direction(Direction direction, Direction old_direction)
 {
 	if (direction == UP)
@@ -631,55 +710,128 @@ bool update_position(GameState *state, Coord max_coord)
 	}
 }
 
-UserInteraction handle_input(GameState *state)
+UserInteraction pop_current_input(GameState *state)
 {
-	// Set timeout
-	timeout(state->speed);
+	if (state->input_queue != NULL)
+	{
+		UserInteraction input = state->input_queue->input;
+		InputFIFO *next = state->input_queue->next;
+		free(state->input_queue);
+		state->input_queue = next;
+		return input;
+	}
+	else
+	{
+		return NONE;
+	}
+}
 
-	// Getting input
+void push_input(UserInteraction input, GameState *state)
+{
+	if (input == NONE)
+	{
+		return;
+	}
+	InputFIFO *new = malloc(sizeof(InputFIFO));
+	new->input = input;
+	new->next = NULL;
+
+	if (state->input_queue == NULL)
+	{
+		state->input_queue = new;
+	}
+	else
+	{
+		InputFIFO *queue = state->input_queue;
+		while (true)
+		{
+			if (queue->next == NULL)
+			{
+				queue->next = new;
+				return;
+			}
+			else
+			{
+				queue = queue->next;
+			}
+		}
+	}
+}
+
+UserInteraction get_last_input(GameState *state)
+{
+	UserInteraction last_input = NONE;
+	InputFIFO *queue = state->input_queue;
+
+	while (queue != NULL)
+	{
+		last_input = queue->input;
+		queue = queue->next;
+	}
+
+	return last_input;
+}
+
+// Gets the next user input and adds it to the input queue
+void get_input(GameState *state)
+{
 	int key = getch();
-
-	// Save old direction
-	state->old_direction = state->direction;
+	UserInteraction input = NONE;
+	UserInteraction last_input = get_last_input(state);
 
 	// Changing direction according to the input
 	if (key == config->left_key)
 	{
-		if (state->direction != RIGHT)
-			state->direction = LEFT;
-		return DIRECTION;
+		if ((last_input != DIRECTION_RIGHT) && (last_input != DIRECTION_LEFT))
+		{
+			input = DIRECTION_LEFT;
+		}
 	}
 	else if (key == config->right_key)
 	{
-		if (state->direction != LEFT)
-			state->direction = RIGHT;
-		return DIRECTION;
+		if ((last_input != DIRECTION_LEFT) && (last_input != DIRECTION_RIGHT))
+		{
+			input = DIRECTION_RIGHT;
+		}
 	}
 	else if (key == config->up_key)
 	{
-		if (state->direction != DOWN)
-			state->direction = UP;
-		return DIRECTION;
+		if ((last_input != DIRECTION_DOWN) && (last_input != DIRECTION_UP))
+		{
+			input = DIRECTION_UP;
+		}
 	}
 	else if (key == config->down_key)
 	{
-		if (state->direction != UP)
-			state->direction = DOWN;
-		return DIRECTION;
+		if ((last_input != DIRECTION_UP) && (last_input != DIRECTION_DOWN))
+		{
+			input = DIRECTION_DOWN;
+		}
 	}
 	else if (key == '\n') // Enter-key
 	{
-		return PAUSE;
+		if (last_input != PAUSE)
+		{
+			input = PAUSE;
+		}
 	}
 	else if (key == 'R')
 	{
-		return RESTART;
+		if (last_input != RESTART)
+		{
+			input = RESTART;
+		}
 	}
 	else if (key == 'Q')
 	{
-		return QUIT;
+		if (last_input != RESTART)
+		{
+			input = QUIT;
+		}
 	}
-	return NONE;
+
+	// Push input into input fifo
+	push_input(input, state);
 }
 
 void paint_objects(WINDOW *game_win, GameState *state)
@@ -700,6 +852,61 @@ void paint_objects(WINDOW *game_win, GameState *state)
 
 UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state)
 {
+	// Update frame delay; either reset it and continue or decrement it and return
+	if (state->frame_delay > 0)
+	{
+		state->frame_delay -= TARGET_FRAME_TIME;
+		return DELAY;
+	}
+	else
+	{
+		state->frame_delay = state->wait_time * NANOSECS_IN_MILLISEC;
+	}
+
+	// Get current input
+	UserInteraction interact = pop_current_input(state);
+
+	// Handle input that changes the state of the game
+	if (interact == PAUSE)
+	{
+		return PAUSE_GAME;
+	}
+	else if (interact == RESTART)
+	{
+		return RESTART_GAME;
+	}
+	else if (interact == QUIT)
+	{
+		return QUIT_GAME;
+	}
+
+	// Save old direction
+	state->old_direction = state->direction;
+
+	// Set direction from input
+	if (interact == DIRECTION_LEFT && state->old_direction != RIGHT)
+	{
+		state->direction = LEFT;
+	}
+	else if (interact == DIRECTION_RIGHT && state->old_direction != LEFT)
+	{
+		state->direction = RIGHT;
+	}
+	else if (interact == DIRECTION_UP && state->old_direction != DOWN)
+	{
+		state->direction = UP;
+	}
+	else if (interact == DIRECTION_DOWN && state->old_direction != UP)
+	{
+		state->direction = DOWN;
+	}
+
+	// No movement, so no update
+	if (state->direction == HOLD)
+	{
+		return NO_UPDATE;
+	}
+
 	// Init max coordinates in relation to game window
 	Coord max_coord = get_max_coords(game_win);
 
@@ -746,13 +953,13 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 		// Let the snake grow and change the speed
 		state->growing +=
 			state->superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
-		if (state->speed > config->max_speed)
+		if (state->wait_time > MINIMUM_WAIT_TIME)
 		{
-			state->speed -= SPEED_FACTOR;
+			state->wait_time -= WAIT_TIME_DECREMENT;
 		}
 		state->points +=
 			(state->points_counter +
-			 state->length + (STARTING_SPEED - state->speed) * 5) *
+			 state->length + (STARTING_WAIT_TIME - state->wait_time) * 5) *
 			(state->superfood_counter == 0 ? 5 : 1);
 		state->points_counter = POINTS_COUNTER_VALUE;
 		state->superfood_counter =
@@ -847,7 +1054,7 @@ GameState init_state(Coord max_coord)
 	// Init gamestate
 	GameState state;
 	state.points = 0;
-	state.speed = STARTING_SPEED;
+	state.wait_time = STARTING_WAIT_TIME;
 	state.pos.x = max_coord.x / 2;
 	state.pos.y = max_coord.y / 2;
 	state.old_pos = state.pos;
@@ -855,11 +1062,11 @@ GameState init_state(Coord max_coord)
 	state.length = 1;
 	state.growing = STARTING_LENGTH - 1;
 	state.grace_frames = GRACE_FRAMES;
-	state.direction = HOLD;
-	state.old_direction = HOLD;
 	state.superfood_counter = SUPERFOOD_COUNTER_VALUE;
 	state.food_coord.x = 0;
 	state.food_coord.y = 0;
+	state.frame_delay = 0;
+	state.input_queue = NULL;
 
 	// Create first cell for the snake
 	LinkedCell *head = malloc(sizeof(LinkedCell));
@@ -880,6 +1087,9 @@ GameState init_state(Coord max_coord)
 // should start without showing the menu.
 bool play_round(void)
 {
+	// Deactivate timeout for getch
+	timeout(0);
+
 	// Init max coordinates
 	int global_max_x = getmaxx(stdscr);
 	int global_max_y = getmaxy(stdscr);
@@ -899,9 +1109,6 @@ bool play_round(void)
 	GameState state = init_state(max_coord);
 	bool did_loose = false;
 	bool should_repeat = false;
-
-	// Set initial timeout
-	timeout(state.speed); // The timeout for getch() makes up the game speed
 
 	// Print status window since points have been set to 0
 	print_status(status_win, &state);
@@ -927,6 +1134,10 @@ bool play_round(void)
 	// Game-Loop
 	while (true)
 	{
+		// Start timer
+		struct timespec start_timer, end_timer;
+		clock_gettime(CLOCK_REALTIME, &start_timer);
+
 		// Paint snake head and food
 		paint_objects(game_win, &state);
 
@@ -937,27 +1148,7 @@ bool play_round(void)
 		wrefresh(game_win);
 
 		// Get input
-		UserInteraction interact = handle_input(&state);
-		if (interact == PAUSE)
-		{
-			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
-			pause_game(status_win, "--- PAUSED ---", 0);
-		}
-		else if (interact == RESTART)
-		{
-			should_repeat = true;
-			break;
-		}
-		else if (interact == QUIT)
-		{
-			clean_exit(0);
-		}
-
-		// No movement, so no update
-		if (state.direction == HOLD)
-		{
-			continue;
-		}
+		get_input(&state);
 
 		// Update game state
 		UpdateResult res = update_state(game_win, status_win, &state);
@@ -966,6 +1157,27 @@ bool play_round(void)
 			did_loose = true;
 			break;
 		}
+		else if (res == PAUSE_GAME)
+		{
+			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
+			pause_game(status_win, "--- PAUSED ---", 0);
+			timeout(0);
+		}
+		else if (res == RESTART_GAME)
+		{
+			should_repeat = true;
+			break;
+		}
+		else if (res == QUIT_GAME)
+		{
+			clean_exit(0);
+		}
+
+		// End timer
+		clock_gettime(CLOCK_REALTIME, &end_timer);
+
+		// Delay game loop to achieve target frame rate
+		delay_frame(&start_timer, &end_timer);
 	}
 
 	// Set a new highscore
@@ -1000,6 +1212,9 @@ bool play_round(void)
 
 	// Freeing memory used for the walls
 	free_linked_list(state.wall);
+
+	// Free remaining input queue
+	free_queue(state.input_queue);
 
 	// Delete windows
 	delwin(game_win);
@@ -1203,22 +1418,12 @@ void parse_arguments(int argc, char **argv)
 			{"vim", no_argument, &vim_flag, true},
 			{"color", required_argument, NULL, 'c'},
 			{"walls", required_argument, NULL, 'w'},
-			{"filepath", required_argument, NULL, 'f'},
-			{"maximum-speed", required_argument, NULL, 1},
-		};
+			{"filepath", required_argument, NULL, 'f'}};
 
 	while ((arg = getopt_long(argc, argv, "osif:rw:c:hv", long_opts, &option_index)) != -1)
 	{
 		switch (arg)
 		{
-		case 1:
-			int_arg = atoi(optarg);
-			if (in_range(int_arg, 0, 150))
-			{
-				config->max_speed = 150 - int_arg;
-				break;
-			}
-			goto help_text;
 		case 'o':
 			config->open_bounds_flag = true;
 			break;
@@ -1255,7 +1460,7 @@ void parse_arguments(int argc, char **argv)
 			{
 				config->snake_color = int_arg;
 				break;
-			}	  // else pass to help information
+			} // else pass to help information
 		case '?': // Invalid parameter
 				  // pass to help information
 		case 'h':
@@ -1270,7 +1475,6 @@ void parse_arguments(int argc, char **argv)
 			printf(" --ignore-savefile, -i\n\tIgnore savefile (don't read nor write)\n");
 			printf(" --filepath path, -f path\n\tSpecify alternate path savefile\n");
 			printf(" --vim\n\tUse vim-style direction controls (H,J,K,L)\n");
-			printf(" --maximum-speed <0,150>\n\tSpecify a new maximum speed (default: 100)\n");
 			printf(" --help, -h\n\tDisplay this information\n");
 			printf(" --version, -v\n\tDisplay version and license information\n\n");
 			printf("In-game Controls:\n");
