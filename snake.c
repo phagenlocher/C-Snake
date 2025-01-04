@@ -55,7 +55,7 @@ typedef enum Direction
 typedef enum UserInteraction
 {
 	// No interaction by the user
-	NONE,
+	NO_INPUT,
 	// Request to pause the game
 	PAUSE,
 	// Request to restart the round
@@ -107,13 +107,13 @@ typedef struct LinkedCell
 	struct LinkedCell *next;
 } LinkedCell;
 
-typedef struct InputFIFO
+typedef struct InputQueue
 {
 	// The first input made
 	UserInteraction input;
 	// The next input made
-	struct InputFIFO *next;
-} InputFIFO;
+	struct InputQueue *next;
+} InputQueue;
 
 typedef struct GameState
 {
@@ -123,6 +123,8 @@ typedef struct GameState
 	Direction direction;
 	// Previous direction from the last update
 	Direction old_direction;
+	// Direction that caused a grace frame, to be repeated next frame if not overwritten
+	Direction grace_direction;
 	// Time (in ms) for an update to happen (determines game speed)
 	int wait_time;
 	// Current delay for updating state
@@ -150,7 +152,7 @@ typedef struct GameState
 	// Points to all walls as a single linked list
 	LinkedCell *wall;
 	// All inputs made by the user to be processed
-	InputFIFO *input_queue;
+	InputQueue *input_queue;
 } GameState;
 
 typedef struct GameConfiguration
@@ -580,14 +582,14 @@ void free_linked_list(LinkedCell *cell)
 	} while (cell != NULL);
 }
 
-void free_queue(InputFIFO *queue)
+void free_queue(InputQueue *queue)
 {
 	// Nothing valid to free
 	if (queue == NULL)
 		return;
 
 	// Free queue
-	InputFIFO *tmp_queue;
+	InputQueue *tmp_queue;
 	do
 	{
 		tmp_queue = queue->next;
@@ -661,9 +663,9 @@ int snake_char_from_direction(Direction direction, Direction old_direction)
 	return 0;
 }
 
-bool update_position(GameState *state, Coord max_coord)
+bool update_position(GameState *state, Direction direction, Coord max_coord)
 {
-	switch (state->direction)
+	switch (direction)
 	{
 	case UP:
 		state->pos.y--;
@@ -715,24 +717,24 @@ UserInteraction pop_current_input(GameState *state)
 	if (state->input_queue != NULL)
 	{
 		UserInteraction input = state->input_queue->input;
-		InputFIFO *next = state->input_queue->next;
+		InputQueue *next = state->input_queue->next;
 		free(state->input_queue);
 		state->input_queue = next;
 		return input;
 	}
 	else
 	{
-		return NONE;
+		return NO_INPUT;
 	}
 }
 
 void push_input(UserInteraction input, GameState *state)
 {
-	if (input == NONE)
+	if (input == NO_INPUT)
 	{
 		return;
 	}
-	InputFIFO *new = malloc(sizeof(InputFIFO));
+	InputQueue *new = malloc(sizeof(InputQueue));
 	new->input = input;
 	new->next = NULL;
 
@@ -742,11 +744,24 @@ void push_input(UserInteraction input, GameState *state)
 	}
 	else
 	{
-		InputFIFO *queue = state->input_queue;
+		InputQueue *queue = state->input_queue;
 		while (true)
 		{
 			if (queue->next == NULL)
 			{
+				if (queue->input == input)
+				{
+					// We don't store the same input multiple times
+					return;
+				}
+				else if ((queue->input == DIRECTION_LEFT && input == DIRECTION_RIGHT) ||
+						 (queue->input == DIRECTION_RIGHT && input == DIRECTION_LEFT) ||
+						 (queue->input == DIRECTION_UP && input == DIRECTION_DOWN) ||
+						 (queue->input == DIRECTION_DOWN && input == DIRECTION_UP))
+				{
+					// We don't store opposite directions as they are illegal
+					return;
+				}
 				queue->next = new;
 				return;
 			}
@@ -758,79 +773,43 @@ void push_input(UserInteraction input, GameState *state)
 	}
 }
 
-UserInteraction get_last_input(GameState *state)
-{
-	UserInteraction last_input = NONE;
-	InputFIFO *queue = state->input_queue;
-
-	while (queue != NULL)
-	{
-		last_input = queue->input;
-		queue = queue->next;
-	}
-
-	return last_input;
-}
-
 // Gets the next user input and adds it to the input queue
 void get_input(GameState *state)
 {
 	int key = getch();
-	UserInteraction input = NONE;
-	UserInteraction last_input = get_last_input(state);
+	UserInteraction input = NO_INPUT;
 
 	// Changing direction according to the input
 	if (key == config->left_key)
 	{
-		if ((last_input != DIRECTION_RIGHT) && (last_input != DIRECTION_LEFT))
-		{
-			input = DIRECTION_LEFT;
-		}
+		input = DIRECTION_LEFT;
 	}
 	else if (key == config->right_key)
 	{
-		if ((last_input != DIRECTION_LEFT) && (last_input != DIRECTION_RIGHT))
-		{
-			input = DIRECTION_RIGHT;
-		}
+		input = DIRECTION_RIGHT;
 	}
 	else if (key == config->up_key)
 	{
-		if ((last_input != DIRECTION_DOWN) && (last_input != DIRECTION_UP))
-		{
-			input = DIRECTION_UP;
-		}
+		input = DIRECTION_UP;
 	}
 	else if (key == config->down_key)
 	{
-		if ((last_input != DIRECTION_UP) && (last_input != DIRECTION_DOWN))
-		{
-			input = DIRECTION_DOWN;
-		}
+		input = DIRECTION_DOWN;
 	}
 	else if (key == '\n') // Enter-key
 	{
-		if (last_input != PAUSE)
-		{
-			input = PAUSE;
-		}
+		input = PAUSE;
 	}
 	else if (key == 'R')
 	{
-		if (last_input != RESTART)
-		{
-			input = RESTART;
-		}
+		input = RESTART;
 	}
 	else if (key == 'Q')
 	{
-		if (last_input != RESTART)
-		{
-			input = QUIT;
-		}
+		input = QUIT;
 	}
 
-	// Push input into input fifo
+	// Push input into input queue
 	push_input(input, state);
 }
 
@@ -864,45 +843,43 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	}
 
 	// Get current input
-	UserInteraction interact = pop_current_input(state);
+	UserInteraction interaction = pop_current_input(state);
 
 	// Handle input that changes the state of the game
-	if (interact == PAUSE)
+	if (interaction == PAUSE)
 	{
 		return PAUSE_GAME;
 	}
-	else if (interact == RESTART)
+	else if (interaction == RESTART)
 	{
 		return RESTART_GAME;
 	}
-	else if (interact == QUIT)
+	else if (interaction == QUIT)
 	{
 		return QUIT_GAME;
 	}
 
-	// Save old direction
-	state->old_direction = state->direction;
-
 	// Set direction from input
-	if (interact == DIRECTION_LEFT && state->old_direction != RIGHT)
+	Direction direction_from_input = state->grace_direction == HOLD ? state->direction : state->grace_direction;
+	if (interaction == DIRECTION_LEFT && direction_from_input != RIGHT)
 	{
-		state->direction = LEFT;
+		direction_from_input = LEFT;
 	}
-	else if (interact == DIRECTION_RIGHT && state->old_direction != LEFT)
+	else if (interaction == DIRECTION_RIGHT && direction_from_input != LEFT)
 	{
-		state->direction = RIGHT;
+		direction_from_input = RIGHT;
 	}
-	else if (interact == DIRECTION_UP && state->old_direction != DOWN)
+	else if (interaction == DIRECTION_UP && direction_from_input != DOWN)
 	{
-		state->direction = UP;
+		direction_from_input = UP;
 	}
-	else if (interact == DIRECTION_DOWN && state->old_direction != UP)
+	else if (interaction == DIRECTION_DOWN && direction_from_input != UP)
 	{
-		state->direction = DOWN;
+		direction_from_input = DOWN;
 	}
 
 	// No movement, so no update
-	if (state->direction == HOLD)
+	if (direction_from_input == HOLD)
 	{
 		return NO_UPDATE;
 	}
@@ -914,7 +891,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	state->old_pos = state->pos;
 
 	// Update position and check if outer bounds were hit
-	bool wall_hit = update_position(state, max_coord);
+	bool wall_hit = update_position(state, direction_from_input, max_coord);
 
 	// The snake hits something
 	if (wall_hit ||
@@ -932,12 +909,20 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 			// let the player change the direction
 			state->grace_frames--;
 			state->pos = state->old_pos;
+
+			state->grace_direction = direction_from_input;
+
 			return GRACE;
 		}
 	}
 
-	// Reset grace frames
+	// Reset grace frames and direction
 	state->grace_frames = GRACE_FRAMES;
+	state->grace_direction = HOLD;
+
+	// Update directions
+	state->old_direction = state->direction;
+	state->direction = direction_from_input;
 
 	// Add new head to snake
 	LinkedCell *new_cell = malloc(sizeof(LinkedCell));
@@ -1054,6 +1039,9 @@ GameState init_state(Coord max_coord)
 	// Init gamestate
 	GameState state;
 	state.points = 0;
+	state.direction = HOLD;
+	state.old_direction = HOLD;
+	state.grace_direction = HOLD;
 	state.wait_time = STARTING_WAIT_TIME;
 	state.pos.x = max_coord.x / 2;
 	state.pos.y = max_coord.y / 2;
