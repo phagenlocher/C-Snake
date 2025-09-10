@@ -153,6 +153,8 @@ typedef struct GameState
 	LinkedCell *wall;
 	// All inputs made by the user to be processed
 	InputQueue *input_queue;
+	// Determines whether the game should run faster based on user input
+	bool speed_up;
 } GameState;
 
 typedef struct GameConfiguration
@@ -728,6 +730,21 @@ UserInteraction pop_current_input(GameState *state)
 	}
 }
 
+void check_speed_up(UserInteraction input, GameState *state)
+{
+	if ((input == DIRECTION_LEFT && state->direction == LEFT) ||
+		(input == DIRECTION_RIGHT && state->direction == RIGHT) ||
+		(input == DIRECTION_UP && state->direction == UP) ||
+		(input == DIRECTION_DOWN && state->direction == DOWN))
+	{
+		state->speed_up = true;
+	}
+	else if (input != NO_INPUT)
+	{
+		state->speed_up = false;
+	}
+}
+
 void push_input(UserInteraction input, GameState *state)
 {
 	if (input == NO_INPUT)
@@ -809,6 +826,9 @@ void get_input(GameState *state)
 		input = QUIT;
 	}
 
+	// Check if double-input in a certain direction happened and enable speed up
+	check_speed_up(input, state);
+
 	// Push input into input queue
 	push_input(input, state);
 }
@@ -840,6 +860,10 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	else
 	{
 		state->frame_delay = state->wait_time * NANOSECS_IN_MILLISEC;
+		if (state->speed_up)
+		{
+			state->frame_delay = state->frame_delay / 3;
+		}
 	}
 
 	// Get current input
@@ -1055,6 +1079,7 @@ GameState init_state(Coord max_coord)
 	state.food_coord.y = 0;
 	state.frame_delay = 0;
 	state.input_queue = NULL;
+	state.speed_up = false;
 
 	// Create first cell for the snake
 	LinkedCell *head = malloc(sizeof(LinkedCell));
