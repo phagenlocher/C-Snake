@@ -25,9 +25,10 @@
 #define WAIT_TIME_DECREMENT 1
 #define MINIMUM_WAIT_TIME 5
 #define STARTING_LENGTH 5
-#define POINTS_COUNTER_VALUE 1000
+#define POINTS_COUNTER_VALUE 999
 #define SUPERFOOD_COUNTER_VALUE 10
 #define MIN_POINTS 100
+#define BONUS_DECAY_PER_SECOND 10
 #define GROW_FACTOR 10
 #define SUPERFOOD_GROW_FACTOR 15
 #define GRACE_FRAMES 3
@@ -157,6 +158,8 @@ typedef struct GameState
 	bool speed_up;
 	// Time when the round started (for timer display)
 	struct timespec start_time;
+	// Time when the current food was spawned (for bonus decay calculation)
+	struct timespec food_start_time;
 } GameState;
 
 typedef struct GameConfiguration
@@ -361,6 +364,25 @@ void format_timespec(char *buffer, size_t bufsize, struct timespec *elapsed)
 	snprintf(buffer, bufsize, "%02d:%02d:%02d", minutes, seconds, centiseconds);
 }
 
+// Calculate current bonus based on elapsed time since food was spawned
+int calculate_current_bonus(struct timespec *food_start_time)
+{
+	struct timespec now;
+	clock_gettime(CLOCK_REALTIME, &now);
+	struct timespec elapsed = subtract_timespec(&now, food_start_time);
+
+	// Convert to centiseconds for smooth decay calculation
+	long elapsed_centis = elapsed.tv_sec * 100 + elapsed.tv_nsec / 10000000;
+	long total_decay = (elapsed_centis * BONUS_DECAY_PER_SECOND) / 100;
+
+	int current_bonus = POINTS_COUNTER_VALUE - total_decay;
+	if (current_bonus < MIN_POINTS)
+	{
+		current_bonus = MIN_POINTS;
+	}
+	return current_bonus;
+}
+
 void print_centered(WINDOW *window, int y, const char string[])
 {
 	int max_x = getmaxx(window);
@@ -419,8 +441,9 @@ void print_status(WINDOW *status_win, GameState *state, struct timespec *elapsed
 		}
 		mvwaddstr(status_win, 1, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
 
-		// Print points counter (left third, row 2)
-		sprintf(txt_buf, "Bonus: %d", state->points_counter);
+		// Print points counter (left third, row 2) - dynamically calculated based on time
+		int current_bonus = calculate_current_bonus(&state->food_start_time);
+		sprintf(txt_buf, "Bonus: %d", current_bonus);
 		mvwaddstr(status_win, 2, (max_x / 3) - half_len(txt_buf), txt_buf);
 
 		// Print length (right third, row 2)
@@ -433,8 +456,9 @@ void print_status(WINDOW *status_win, GameState *state, struct timespec *elapsed
 		sprintf(txt_buf, "Score: %lld", state->points);
 		mvwaddstr(status_win, 1, (max_x / 2) - half_len(txt_buf), txt_buf);
 
-		// Print points counter
-		sprintf(txt_buf, "Bonus: %d", state->points_counter);
+		// Print points counter - dynamically calculated based on time
+		int current_bonus = calculate_current_bonus(&state->food_start_time);
+		sprintf(txt_buf, "Bonus: %d", current_bonus);
 		mvwaddstr(status_win, 2, (max_x / 2) - half_len(txt_buf), txt_buf);
 	}
 
@@ -502,7 +526,8 @@ void new_random_coordinates(
 	LinkedCell *snake,
 	LinkedCell *wall,
 	Coord *coord,
-	Coord max_coords)
+	Coord max_coords,
+	struct timespec *food_start_time)
 {
 	int x, y;
 	do
@@ -518,6 +543,12 @@ void new_random_coordinates(
 	// Save coordinates
 	coord->x = x;
 	coord->y = y;
+
+	// Record when this food was spawned for bonus decay calculation
+	if (food_start_time != NULL)
+	{
+		clock_gettime(CLOCK_REALTIME, food_start_time);
+	}
 }
 
 LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedCell *last_cell)
@@ -977,6 +1008,8 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	if ((state->pos.x == state->food_coord.x) &&
 		(state->pos.y == state->food_coord.y))
 	{
+		// Calculate bonus based on elapsed time since food was spawned
+		int current_bonus = calculate_current_bonus(&state->food_start_time);
 		// Let the snake grow and change the speed
 		state->growing +=
 			state->superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
@@ -985,13 +1018,12 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 			state->wait_time -= WAIT_TIME_DECREMENT;
 		}
 		state->points +=
-			(state->points_counter +
+			(current_bonus +
 			 state->length + (STARTING_WAIT_TIME - state->wait_time) * 5) *
 			(state->superfood_counter == 0 ? 5 : 1);
-		state->points_counter = POINTS_COUNTER_VALUE;
 		state->superfood_counter =
 			(state->superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : state->superfood_counter - 1;
-		new_random_coordinates(state->head, state->wall, &state->food_coord, max_coord);
+		new_random_coordinates(state->head, state->wall, &state->food_coord, max_coord, &state->food_start_time);
 	}
 
 	// If the snake is not growing...
@@ -1013,12 +1045,6 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 		state->growing--;
 		// ...and increment 'length'
 		state->length++;
-	}
-
-	// Decrement the points that will be added
-	if (state->points_counter > MIN_POINTS)
-	{
-		state->points_counter--;
 	}
 
 	return CONTINUE;
@@ -1100,6 +1126,8 @@ GameState init_state(Coord max_coord)
 	state.speed_up = false;
 	state.start_time.tv_sec = 0;
 	state.start_time.tv_nsec = 0;
+	state.food_start_time.tv_sec = 0;
+	state.food_start_time.tv_nsec = 0;
 
 	// Create first cell for the snake
 	LinkedCell *head = malloc(sizeof(LinkedCell));
@@ -1165,7 +1193,7 @@ bool play_round(void)
 	}
 
 	// Init food coordinates
-	new_random_coordinates(state.head, state.wall, &state.food_coord, max_coord);
+	new_random_coordinates(state.head, state.wall, &state.food_coord, max_coord, &state.food_start_time);
 
 	// Game-Loop
 	while (true)
