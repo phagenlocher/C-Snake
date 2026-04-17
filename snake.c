@@ -367,6 +367,12 @@ void format_timespec(char *buffer, size_t bufsize, struct timespec *elapsed)
 // Calculate current bonus based on elapsed time since food was spawned
 int calculate_current_bonus(struct timespec *food_start_time)
 {
+	// If food timer hasn't started yet (all zeros), return full bonus
+	if (food_start_time->tv_sec == 0 && food_start_time->tv_nsec == 0)
+	{
+		return POINTS_COUNTER_VALUE;
+	}
+
 	struct timespec now;
 	clock_gettime(CLOCK_REALTIME, &now);
 	struct timespec elapsed = subtract_timespec(&now, food_start_time);
@@ -957,6 +963,15 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 		return NO_UPDATE;
 	}
 
+	// First movement - start the timers if they haven't started yet
+	if (state->start_time.tv_sec == 0 && state->start_time.tv_nsec == 0)
+	{
+		struct timespec now;
+		clock_gettime(CLOCK_REALTIME, &now);
+		state->start_time = now;
+		state->food_start_time = now;
+	}
+
 	// Init max coordinates in relation to game window
 	Coord max_coord = get_max_coords(game_win);
 
@@ -1171,9 +1186,6 @@ bool play_round(void)
 	bool did_loose = false;
 	bool should_repeat = false;
 
-	// Capture round start time for timer
-	clock_gettime(CLOCK_REALTIME, &state.start_time);
-
 	// Print status window since points have been set to 0
 	print_status(status_win, &state, NULL);
 
@@ -1192,8 +1204,8 @@ bool play_round(void)
 		} while (tmp_cell2 != NULL);
 	}
 
-	// Init food coordinates
-	new_random_coordinates(state.head, state.wall, &state.food_coord, max_coord, &state.food_start_time);
+	// Init food coordinates (pass NULL for food_start_time so timer doesn't start yet)
+	new_random_coordinates(state.head, state.wall, &state.food_coord, max_coord, NULL);
 
 	// Game-Loop
 	while (true)
@@ -1202,15 +1214,19 @@ bool play_round(void)
 		struct timespec start_timer, end_timer, current_time, elapsed;
 		clock_gettime(CLOCK_REALTIME, &start_timer);
 
-		// Calculate elapsed time for timer display
-		clock_gettime(CLOCK_REALTIME, &current_time);
-		elapsed = subtract_timespec(&current_time, &state.start_time);
+		// Calculate elapsed time for timer display (only if timer has started)
+		bool timer_started = (state.start_time.tv_sec != 0 || state.start_time.tv_nsec != 0);
+		if (timer_started)
+		{
+			clock_gettime(CLOCK_REALTIME, &current_time);
+			elapsed = subtract_timespec(&current_time, &state.start_time);
+		}
 
 		// Paint snake head and food
 		paint_objects(game_win, &state);
 
 		// Update status window
-		print_status(status_win, &state, &elapsed);
+		print_status(status_win, &state, timer_started ? &elapsed : NULL);
 
 		// Refresh game window
 		wrefresh(game_win);
