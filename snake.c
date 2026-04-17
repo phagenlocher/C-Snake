@@ -155,6 +155,8 @@ typedef struct GameState
 	InputQueue *input_queue;
 	// Determines whether the game should run faster based on user input
 	bool speed_up;
+	// Time when the round started (for timer display)
+	struct timespec start_time;
 } GameState;
 
 typedef struct GameConfiguration
@@ -350,6 +352,15 @@ void delay_frame(struct timespec *start_timer, struct timespec *end_timer)
 	}
 }
 
+// Format time as MM:SS:CC (minutes, seconds, centiseconds)
+void format_timespec(char *buffer, size_t bufsize, struct timespec *elapsed)
+{
+	int minutes = elapsed->tv_sec / 60;
+	int seconds = elapsed->tv_sec % 60;
+	int centiseconds = elapsed->tv_nsec / 10000000; // Convert nanoseconds to centiseconds (2 digits)
+	snprintf(buffer, bufsize, "%02d:%02d:%02d", minutes, seconds, centiseconds);
+}
+
 void print_centered(WINDOW *window, int y, const char string[])
 {
 	int max_x = getmaxx(window);
@@ -364,7 +375,7 @@ void print_offset(WINDOW *window, int x_offset, int y, const char string[])
 	mvwaddstr(window, y, x + x_offset, string);
 }
 
-void print_status(WINDOW *status_win, GameState *state)
+void print_status(WINDOW *status_win, GameState *state, struct timespec *elapsed)
 {
 	char txt_buf[50];
 	int max_x = getmaxx(status_win);
@@ -386,11 +397,18 @@ void print_status(WINDOW *status_win, GameState *state)
 
 	if (max_x > 50)
 	{
-		// Print score
+		// Print score (left third)
 		sprintf(txt_buf, "Score: %lld", state->points);
 		mvwaddstr(status_win, 1, (max_x / 3) - half_len(txt_buf), txt_buf);
 
-		// Print highscore
+		// Print timer (center) if elapsed time provided
+		if (elapsed != NULL)
+		{
+			format_timespec(txt_buf, sizeof(txt_buf), elapsed);
+			mvwaddstr(status_win, 1, (max_x / 2) - half_len(txt_buf), txt_buf);
+		}
+
+		// Print highscore (right third)
 		if (config->highscore != 0)
 		{
 			sprintf(txt_buf, "Highscore: %lld", config->highscore);
@@ -401,11 +419,11 @@ void print_status(WINDOW *status_win, GameState *state)
 		}
 		mvwaddstr(status_win, 1, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
 
-		// Print points counter
+		// Print points counter (left third, row 2)
 		sprintf(txt_buf, "Bonus: %d", state->points_counter);
 		mvwaddstr(status_win, 2, (max_x / 3) - half_len(txt_buf), txt_buf);
 
-		// Print length
+		// Print length (right third, row 2)
 		sprintf(txt_buf, "Length: %d", state->length);
 		mvwaddstr(status_win, 2, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
 	}
@@ -1080,6 +1098,8 @@ GameState init_state(Coord max_coord)
 	state.frame_delay = 0;
 	state.input_queue = NULL;
 	state.speed_up = false;
+	state.start_time.tv_sec = 0;
+	state.start_time.tv_nsec = 0;
 
 	// Create first cell for the snake
 	LinkedCell *head = malloc(sizeof(LinkedCell));
@@ -1123,8 +1143,11 @@ bool play_round(void)
 	bool did_loose = false;
 	bool should_repeat = false;
 
+	// Capture round start time for timer
+	clock_gettime(CLOCK_REALTIME, &state.start_time);
+
 	// Print status window since points have been set to 0
-	print_status(status_win, &state);
+	print_status(status_win, &state, NULL);
 
 	if (state.wall != NULL)
 	{
@@ -1148,14 +1171,18 @@ bool play_round(void)
 	while (true)
 	{
 		// Start timer
-		struct timespec start_timer, end_timer;
+		struct timespec start_timer, end_timer, current_time, elapsed;
 		clock_gettime(CLOCK_REALTIME, &start_timer);
+
+		// Calculate elapsed time for timer display
+		clock_gettime(CLOCK_REALTIME, &current_time);
+		elapsed = subtract_timespec(&current_time, &state.start_time);
 
 		// Paint snake head and food
 		paint_objects(game_win, &state);
 
 		// Update status window
-		print_status(status_win, &state);
+		print_status(status_win, &state, &elapsed);
 
 		// Refresh game window
 		wrefresh(game_win);
