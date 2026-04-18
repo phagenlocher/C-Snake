@@ -16,6 +16,10 @@
 	endwin();            \
 	exit(code);
 #define in_range(x, min, max) (x >= min) && (x <= max)
+#define is_timespec_zero(ts) ((ts)->tv_sec == 0 && (ts)->tv_nsec == 0)
+#define set_timespec_zero(ts) \
+	(ts)->tv_sec = 0;         \
+	(ts)->tv_nsec = 0
 #define NANOSECS_IN_SEC 1000000000
 #define NANOSECS_IN_MILLISEC 1000000
 #define TARGET_FRAME_TIME 8333333 // 120 frames per second (NANOSECS_IN_SEC / 120)
@@ -382,7 +386,7 @@ void format_timespec(char *buffer, size_t bufsize, struct timespec *elapsed)
 int calculate_current_bonus(struct timespec *food_timer)
 {
 	// If food timer hasn't started yet (all zeros), return full bonus
-	if (food_timer->tv_sec == 0 && food_timer->tv_nsec == 0)
+	if (is_timespec_zero(food_timer))
 	{
 		return POINTS_COUNTER_VALUE;
 	}
@@ -981,7 +985,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	}
 
 	// First movement, start the timers if they haven't started yet
-	if (state->round_timer.tv_sec == 0 && state->round_timer.tv_nsec == 0)
+	if (is_timespec_zero(&state->round_timer))
 	{
 		struct timespec now;
 		clock_gettime(CLOCK_REALTIME, &now);
@@ -1156,10 +1160,8 @@ GameState init_state(Coord max_coord)
 	state.frame_delay = 0;
 	state.input_queue = NULL;
 	state.speed_up = false;
-	state.round_timer.tv_sec = 0;
-	state.round_timer.tv_nsec = 0;
-	state.food_timer.tv_sec = 0;
-	state.food_timer.tv_nsec = 0;
+	set_timespec_zero(&state.round_timer);
+	set_timespec_zero(&state.food_timer);
 
 	// Create first cell for the snake
 	LinkedCell *head = malloc(sizeof(LinkedCell));
@@ -1232,7 +1234,7 @@ bool play_round(void)
 		clock_gettime(CLOCK_REALTIME, &start_timer);
 
 		// Calculate elapsed time for timer display (only if timer has started)
-		bool timer_started = (state.round_timer.tv_sec != 0 || state.round_timer.tv_nsec != 0);
+		bool timer_started = !is_timespec_zero(&state.round_timer);
 		if (timer_started)
 		{
 			clock_gettime(CLOCK_REALTIME, &current_time);
