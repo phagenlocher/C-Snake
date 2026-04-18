@@ -6,7 +6,7 @@ This is a basic implementation focusing on a simple design, small code base, min
 
 ## How to play
 
-Control the snake with arrow keys. Holding down a key in a certain direction will make the snake faster! You can pause the game by pressing **ENTER**. 
+Control the snake with arrow keys. Pressing the same direction key twice will give the snake a speed boost until the direction is changed! You can pause the game by pressing **ENTER**. 
 
 **SHIFT + Q** will exit the current game and will leave you at the title screen. **SHIFT + R** will restart the round. If the size of your terminal has changed you can use this to refit the game to your terminal.
 
