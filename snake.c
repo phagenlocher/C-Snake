@@ -38,8 +38,8 @@
 #define GRACE_FRAMES 3
 
 // Misc. constants
-#define VERSION "0.60.0 (Beta)"
-#define CC_END_YEAR "2024"
+#define VERSION "0.70.0 (Beta)"
+#define CC_END_YEAR "2026"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 // 19 characters are needed to display the max number for long long
 
