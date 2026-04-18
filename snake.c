@@ -250,10 +250,10 @@ bool write_score_file(long long score)
 	}
 
 	// Memory for the string representation of the score
-	char score_str[FILE_LENGTH];
+	char score_str[FILE_LENGTH + 1];
 
 	// Write highscore into memory
-	sprintf(score_str, "%.*lld", FILE_LENGTH - 1, score);
+	snprintf(score_str, sizeof(score_str), "%.*lld", FILE_LENGTH - 1, score);
 
 	// Open file
 	FILE *file = fopen(config->save_file_path, "w");
