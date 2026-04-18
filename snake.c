@@ -1180,9 +1180,6 @@ GameState init_state(Coord max_coord)
 // should start without showing the menu.
 bool play_round(void)
 {
-	// Deactivate timeout for getch
-	timeout(0);
-
 	// Init max coordinates
 	int global_max_x = getmaxx(stdscr);
 	int global_max_y = getmaxy(stdscr);
@@ -1493,6 +1490,9 @@ show:
 		switch (index)
 		{
 		case 0:
+			// Deactivate timeout for getch
+			timeout(0);
+			// Start game
 			play_game();
 			break;
 		case 1:
