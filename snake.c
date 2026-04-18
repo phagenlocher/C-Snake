@@ -425,18 +425,29 @@ void print_status(WINDOW *status_win, GameState *state, struct timespec *elapsed
 
 	if (max_x > 50)
 	{
-		// Print score (left third)
-		sprintf(txt_buf, "Score: %lld", state->points);
+		// Print bonus (left third, row 1) - dynamically calculated based on time
+		int current_bonus = calculate_current_bonus(&state->food_start_time);
+		sprintf(txt_buf, "Bonus: %d", current_bonus);
 		mvwaddstr(status_win, 1, (max_x / 3) - half_len(txt_buf), txt_buf);
 
-		// Print timer (center) if elapsed time provided
+		// Print time (right third, row 1) - same format as timer
 		if (elapsed != NULL)
 		{
-			format_timespec(txt_buf, sizeof(txt_buf), elapsed);
-			mvwaddstr(status_win, 1, (max_x / 2) - half_len(txt_buf), txt_buf);
+			char time_buf[20];
+			format_timespec(time_buf, sizeof(time_buf), elapsed);
+			sprintf(txt_buf, "Time: %s", time_buf);
 		}
+		else
+		{
+			sprintf(txt_buf, "Time: --:--:--");
+		}
+		mvwaddstr(status_win, 1, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
 
-		// Print highscore (right third)
+		// Print score (left third, row 2)
+		sprintf(txt_buf, "Score: %lld", state->points);
+		mvwaddstr(status_win, 2, (max_x / 3) - half_len(txt_buf), txt_buf);
+
+		// Print highscore (right third, row 2)
 		if (config->highscore != 0)
 		{
 			sprintf(txt_buf, "Highscore: %lld", config->highscore);
@@ -445,26 +456,17 @@ void print_status(WINDOW *status_win, GameState *state, struct timespec *elapsed
 		{
 			sprintf(txt_buf, "No highscore set");
 		}
-		mvwaddstr(status_win, 1, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
-
-		// Print points counter (left third, row 2) - dynamically calculated based on time
-		int current_bonus = calculate_current_bonus(&state->food_start_time);
-		sprintf(txt_buf, "Bonus: %d", current_bonus);
-		mvwaddstr(status_win, 2, (max_x / 3) - half_len(txt_buf), txt_buf);
-
-		// Print length (right third, row 2)
-		sprintf(txt_buf, "Length: %d", state->length);
 		mvwaddstr(status_win, 2, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
 	}
 	else
 	{
-		// Print score
-		sprintf(txt_buf, "Score: %lld", state->points);
-		mvwaddstr(status_win, 1, (max_x / 2) - half_len(txt_buf), txt_buf);
-
-		// Print points counter - dynamically calculated based on time
+		// Print bonus (row 1) - dynamically calculated based on time
 		int current_bonus = calculate_current_bonus(&state->food_start_time);
 		sprintf(txt_buf, "Bonus: %d", current_bonus);
+		mvwaddstr(status_win, 1, (max_x / 2) - half_len(txt_buf), txt_buf);
+
+		// Print score (row 2)
+		sprintf(txt_buf, "Score: %lld", state->points);
 		mvwaddstr(status_win, 2, (max_x / 2) - half_len(txt_buf), txt_buf);
 	}
 
