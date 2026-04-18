@@ -156,10 +156,12 @@ typedef struct GameState
 	InputQueue *input_queue;
 	// Determines whether the game should run faster based on user input
 	bool speed_up;
-	// Time when the round started (for timer display)
-	struct timespec start_time;
+	// Base time for round timer display. Set to current time on first movement,
+	// then adjusted forward by pause durations so the displayed elapsed time
+	// does not include time spent paused.
+	struct timespec round_timer;
 	// Time when the current food was spawned (for bonus decay calculation)
-	struct timespec food_start_time;
+	struct timespec food_timer;
 } GameState;
 
 typedef struct GameConfiguration
@@ -321,6 +323,18 @@ inline size_t half_len(const char string[])
 	return strlen(string) / 2;
 }
 
+// Adds `t2` to `t1` in place, normalizing nsecs to [0, NANOSECS_IN_SEC)
+void add_timespec(struct timespec *t1, struct timespec *t2)
+{
+	t1->tv_sec += t2->tv_sec;
+	t1->tv_nsec += t2->tv_nsec;
+	if (t1->tv_nsec >= NANOSECS_IN_SEC)
+	{
+		t1->tv_sec++;
+		t1->tv_nsec -= NANOSECS_IN_SEC;
+	}
+}
+
 // Subtracts `t2` from `t1` assuming that `t1` > `t2`
 struct timespec subtract_timespec(struct timespec *t1, struct timespec *t2)
 {
@@ -365,17 +379,17 @@ void format_timespec(char *buffer, size_t bufsize, struct timespec *elapsed)
 }
 
 // Calculate current bonus based on elapsed time since food was spawned
-int calculate_current_bonus(struct timespec *food_start_time)
+int calculate_current_bonus(struct timespec *food_timer)
 {
 	// If food timer hasn't started yet (all zeros), return full bonus
-	if (food_start_time->tv_sec == 0 && food_start_time->tv_nsec == 0)
+	if (food_timer->tv_sec == 0 && food_timer->tv_nsec == 0)
 	{
 		return POINTS_COUNTER_VALUE;
 	}
 
 	struct timespec now;
 	clock_gettime(CLOCK_REALTIME, &now);
-	struct timespec elapsed = subtract_timespec(&now, food_start_time);
+	struct timespec elapsed = subtract_timespec(&now, food_timer);
 
 	// Convert to centiseconds for smooth decay calculation
 	long elapsed_centis = elapsed.tv_sec * 100 + elapsed.tv_nsec / 10000000;
@@ -426,7 +440,7 @@ void print_status(WINDOW *status_win, GameState *state, struct timespec *elapsed
 	if (max_x > 50)
 	{
 		// Print bonus (left third, row 1) - dynamically calculated based on time
-		int current_bonus = calculate_current_bonus(&state->food_start_time);
+		int current_bonus = calculate_current_bonus(&state->food_timer);
 		sprintf(txt_buf, "Bonus: %d", current_bonus);
 		mvwaddstr(status_win, 1, (max_x / 3) - half_len(txt_buf), txt_buf);
 
@@ -461,7 +475,7 @@ void print_status(WINDOW *status_win, GameState *state, struct timespec *elapsed
 	else
 	{
 		// Print bonus (row 1) - dynamically calculated based on time
-		int current_bonus = calculate_current_bonus(&state->food_start_time);
+		int current_bonus = calculate_current_bonus(&state->food_timer);
 		sprintf(txt_buf, "Bonus: %d", current_bonus);
 		mvwaddstr(status_win, 1, (max_x / 2) - half_len(txt_buf), txt_buf);
 
@@ -493,6 +507,7 @@ void pause_game(WINDOW *status_win, const char string[], const int seconds)
 	{
 		timeout(-1); // getch is in blocking mode
 		getch();
+		timeout(0); // reset blocking mode
 	}
 	else
 	{
@@ -535,7 +550,7 @@ void new_random_coordinates(
 	LinkedCell *wall,
 	Coord *coord,
 	Coord max_coords,
-	struct timespec *food_start_time)
+	struct timespec *food_timer)
 {
 	int x, y;
 	do
@@ -553,9 +568,9 @@ void new_random_coordinates(
 	coord->y = y;
 
 	// Record when this food was spawned for bonus decay calculation
-	if (food_start_time != NULL)
+	if (food_timer != NULL)
 	{
-		clock_gettime(CLOCK_REALTIME, food_start_time);
+		clock_gettime(CLOCK_REALTIME, food_timer);
 	}
 }
 
@@ -965,13 +980,13 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 		return NO_UPDATE;
 	}
 
-	// First movement - start the timers if they haven't started yet
-	if (state->start_time.tv_sec == 0 && state->start_time.tv_nsec == 0)
+	// First movement, start the timers if they haven't started yet
+	if (state->round_timer.tv_sec == 0 && state->round_timer.tv_nsec == 0)
 	{
 		struct timespec now;
 		clock_gettime(CLOCK_REALTIME, &now);
-		state->start_time = now;
-		state->food_start_time = now;
+		state->round_timer = now;
+		state->food_timer = now;
 	}
 
 	// Init max coordinates in relation to game window
@@ -1026,7 +1041,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 		(state->pos.y == state->food_coord.y))
 	{
 		// Calculate bonus based on elapsed time since food was spawned
-		int current_bonus = calculate_current_bonus(&state->food_start_time);
+		int current_bonus = calculate_current_bonus(&state->food_timer);
 		// Let the snake grow and change the speed
 		state->growing +=
 			state->superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
@@ -1040,7 +1055,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 			(state->superfood_counter == 0 ? 5 : 1);
 		state->superfood_counter =
 			(state->superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : state->superfood_counter - 1;
-		new_random_coordinates(state->head, state->wall, &state->food_coord, max_coord, &state->food_start_time);
+		new_random_coordinates(state->head, state->wall, &state->food_coord, max_coord, &state->food_timer);
 	}
 
 	// If the snake is not growing...
@@ -1141,10 +1156,10 @@ GameState init_state(Coord max_coord)
 	state.frame_delay = 0;
 	state.input_queue = NULL;
 	state.speed_up = false;
-	state.start_time.tv_sec = 0;
-	state.start_time.tv_nsec = 0;
-	state.food_start_time.tv_sec = 0;
-	state.food_start_time.tv_nsec = 0;
+	state.round_timer.tv_sec = 0;
+	state.round_timer.tv_nsec = 0;
+	state.food_timer.tv_sec = 0;
+	state.food_timer.tv_nsec = 0;
 
 	// Create first cell for the snake
 	LinkedCell *head = malloc(sizeof(LinkedCell));
@@ -1206,7 +1221,7 @@ bool play_round(void)
 		} while (tmp_cell2 != NULL);
 	}
 
-	// Init food coordinates (pass NULL for food_start_time so timer doesn't start yet)
+	// Init food coordinates (pass NULL for food_timer so timer doesn't start yet)
 	new_random_coordinates(state.head, state.wall, &state.food_coord, max_coord, NULL);
 
 	// Game-Loop
@@ -1217,11 +1232,11 @@ bool play_round(void)
 		clock_gettime(CLOCK_REALTIME, &start_timer);
 
 		// Calculate elapsed time for timer display (only if timer has started)
-		bool timer_started = (state.start_time.tv_sec != 0 || state.start_time.tv_nsec != 0);
+		bool timer_started = (state.round_timer.tv_sec != 0 || state.round_timer.tv_nsec != 0);
 		if (timer_started)
 		{
 			clock_gettime(CLOCK_REALTIME, &current_time);
-			elapsed = subtract_timespec(&current_time, &state.start_time);
+			elapsed = subtract_timespec(&current_time, &state.round_timer);
 		}
 
 		// Paint snake head and food
@@ -1246,8 +1261,25 @@ bool play_round(void)
 		else if (res == PAUSE_GAME)
 		{
 			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
+
+			// Record when the pause starts so we can calculate pause duration
+			struct timespec pause_start_time;
+			clock_gettime(CLOCK_REALTIME, &pause_start_time);
+
+			// Do the actual pause
 			pause_game(status_win, "--- PAUSED ---", 0);
-			timeout(0);
+
+			// Record time when game was resumed
+			struct timespec resume_time;
+			clock_gettime(CLOCK_REALTIME, &resume_time);
+
+			// Calculate duration of pause
+			struct timespec pause_duration = subtract_timespec(&resume_time, &pause_start_time);
+
+			// Adjust both timers forward by pause duration so displayed time
+			// and bonus decay do not include time spent paused
+			add_timespec(&state.round_timer, &pause_duration);
+			add_timespec(&state.food_timer, &pause_duration);
 		}
 		else if (res == RESTART_GAME)
 		{
