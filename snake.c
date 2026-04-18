@@ -1,3 +1,7 @@
+// we are using clocks from POSIX
+// see here: https://www.gnu.org/software/libc/manual/html_node/Feature-Test-Macros.html#index-_005fPOSIX_005fC_005fSOURCE
+#define _POSIX_C_SOURCE 200809L
+
 #include <ncurses.h>
 #include <stdbool.h>
 #include <limits.h>
@@ -12,22 +16,30 @@
 	endwin();            \
 	exit(code);
 #define in_range(x, min, max) (x >= min) && (x <= max)
+#define is_timespec_zero(ts) ((ts)->tv_sec == 0 && (ts)->tv_nsec == 0)
+#define set_timespec_zero(ts) \
+	(ts)->tv_sec = 0;         \
+	(ts)->tv_nsec = 0
+#define NANOSECS_IN_SEC 1000000000
+#define NANOSECS_IN_MILLISEC 1000000
+#define TARGET_FRAME_TIME 8333333 // 120 frames per second (NANOSECS_IN_SEC / 120)
 
 // Constants important for gameplay
-#define STARTING_SPEED 150
+#define STARTING_WAIT_TIME 80
+#define WAIT_TIME_DECREMENT 1
+#define MINIMUM_WAIT_TIME 5
 #define STARTING_LENGTH 5
-#define POINTS_COUNTER_VALUE 1000
+#define POINTS_COUNTER_VALUE 999
 #define SUPERFOOD_COUNTER_VALUE 10
 #define MIN_POINTS 100
-#define STD_MAX_SPEED 50
+#define BONUS_DECAY_PER_SECOND 50
 #define GROW_FACTOR 10
 #define SUPERFOOD_GROW_FACTOR 15
-#define SPEED_FACTOR 2
 #define GRACE_FRAMES 3
 
 // Misc. constants
-#define VERSION "0.58.0 (Beta)"
-#define CC_END_YEAR "2024"
+#define VERSION "0.70.0 (Beta)"
+#define CC_END_YEAR "2026"
 #define STD_FILE_NAME ".csnake"
 #define FILE_LENGTH 20 // 19 characters are needed to display the max number for long long
 
@@ -48,7 +60,7 @@ typedef enum Direction
 typedef enum UserInteraction
 {
 	// No interaction by the user
-	NONE,
+	NO_INPUT,
 	// Request to pause the game
 	PAUSE,
 	// Request to restart the round
@@ -56,7 +68,10 @@ typedef enum UserInteraction
 	// Request to quit the program
 	QUIT,
 	// Direction button pressed
-	DIRECTION
+	DIRECTION_LEFT,
+	DIRECTION_RIGHT,
+	DIRECTION_UP,
+	DIRECTION_DOWN
 } UserInteraction;
 
 typedef enum UpdateResult
@@ -66,7 +81,17 @@ typedef enum UpdateResult
 	// The round ends in a game over
 	GAME_OVER,
 	// The round may continue
-	CONTINUE
+	CONTINUE,
+	// Delayed frame
+	DELAY,
+	// Game should pause
+	PAUSE_GAME,
+	// Game should be quit
+	QUIT_GAME,
+	// Game should restart
+	RESTART_GAME,
+	// No update to be made
+	NO_UPDATE
 } UpdateResult;
 
 typedef struct Coord
@@ -87,6 +112,14 @@ typedef struct LinkedCell
 	struct LinkedCell *next;
 } LinkedCell;
 
+typedef struct InputQueue
+{
+	// The first input made
+	UserInteraction input;
+	// The next input made
+	struct InputQueue *next;
+} InputQueue;
+
 typedef struct GameState
 {
 	// Current score
@@ -95,8 +128,12 @@ typedef struct GameState
 	Direction direction;
 	// Previous direction from the last update
 	Direction old_direction;
-	// Current speed
-	int speed;
+	// Direction that caused a grace frame, to be repeated next frame if not overwritten
+	Direction grace_direction;
+	// Time (in ms) for an update to happen (determines game speed)
+	int wait_time;
+	// Current delay for updating state
+	long frame_delay;
 	// Current position of the snake head
 	Coord pos;
 	// Position of the snake head from the last update
@@ -119,14 +156,22 @@ typedef struct GameState
 	LinkedCell *last;
 	// Points to all walls as a single linked list
 	LinkedCell *wall;
+	// All inputs made by the user to be processed
+	InputQueue *input_queue;
+	// Determines whether the game should run faster based on user input
+	bool speed_up;
+	// Base time for round timer display. Set to current time on first movement,
+	// then adjusted forward by pause durations so the displayed elapsed time
+	// does not include time spent paused.
+	struct timespec round_timer;
+	// Time when the current food was spawned (for bonus decay calculation)
+	struct timespec food_timer;
 } GameState;
 
 typedef struct GameConfiguration
 {
 	// Path to the savefile
 	char *save_file_path;
-	// Maximum possible speed
-	unsigned int max_speed;
 	// Highscore either read from savefile or updated from last game round
 	long long highscore;
 	// Specifies whether outer walls should be open
@@ -179,7 +224,6 @@ void init_configuration(void)
 {
 	config = malloc(sizeof(GameConfiguration));
 	config->save_file_path = init_file_path();
-	config->max_speed = STD_MAX_SPEED;
 	config->highscore = 0;
 	config->ignore_flag = false;
 	config->remove_flag = false;
@@ -206,10 +250,10 @@ bool write_score_file(long long score)
 	}
 
 	// Memory for the string representation of the score
-	char score_str[FILE_LENGTH];
+	char score_str[FILE_LENGTH + 1];
 
 	// Write highscore into memory
-	sprintf(score_str, "%.*lld", FILE_LENGTH - 1, score);
+	snprintf(score_str, sizeof(score_str), "%.*lld", FILE_LENGTH - 1, score);
 
 	// Open file
 	FILE *file = fopen(config->save_file_path, "w");
@@ -283,6 +327,86 @@ inline size_t half_len(const char string[])
 	return strlen(string) / 2;
 }
 
+// Adds `t2` to `t1` in place, normalizing nsecs to [0, NANOSECS_IN_SEC)
+void add_timespec(struct timespec *t1, struct timespec *t2)
+{
+	t1->tv_sec += t2->tv_sec;
+	t1->tv_nsec += t2->tv_nsec;
+	if (t1->tv_nsec >= NANOSECS_IN_SEC)
+	{
+		t1->tv_sec++;
+		t1->tv_nsec -= NANOSECS_IN_SEC;
+	}
+}
+
+// Subtracts `t2` from `t1` assuming that `t1` > `t2`
+struct timespec subtract_timespec(struct timespec *t1, struct timespec *t2)
+{
+	struct timespec diff;
+	diff.tv_sec = t1->tv_sec - t2->tv_sec;
+	long new_nsec = t1->tv_nsec - t2->tv_nsec;
+	if (new_nsec < 0)
+	{
+		diff.tv_sec--;
+		diff.tv_nsec = NANOSECS_IN_SEC + new_nsec;
+	}
+	else
+	{
+		diff.tv_nsec = new_nsec;
+	}
+	return diff;
+}
+
+void delay_frame(struct timespec *start_timer, struct timespec *end_timer)
+{
+	struct timespec wait_time, rem, delta = subtract_timespec(end_timer, start_timer);
+	if (delta.tv_sec == 0)
+	{
+		long nano_delay = TARGET_FRAME_TIME - delta.tv_nsec;
+		wait_time.tv_sec = 0;
+		wait_time.tv_nsec = nano_delay;
+		nanosleep(&wait_time, &rem);
+	}
+	else
+	{
+		// We are already under 1 frame per second, no reason to delay!
+	}
+}
+
+// Format time as MM:SS:CC (minutes, seconds, centiseconds)
+void format_timespec(char *buffer, size_t bufsize, struct timespec *elapsed)
+{
+	int minutes = elapsed->tv_sec / 60;
+	int seconds = elapsed->tv_sec % 60;
+	int centiseconds = elapsed->tv_nsec / 10000000; // Convert nanoseconds to centiseconds (2 digits)
+	snprintf(buffer, bufsize, "%02d:%02d:%02d", minutes, seconds, centiseconds);
+}
+
+// Calculate current bonus based on elapsed time since food was spawned
+int calculate_current_bonus(struct timespec *food_timer)
+{
+	// If food timer hasn't started yet (all zeros), return full bonus
+	if (is_timespec_zero(food_timer))
+	{
+		return POINTS_COUNTER_VALUE;
+	}
+
+	struct timespec now;
+	clock_gettime(CLOCK_REALTIME, &now);
+	struct timespec elapsed = subtract_timespec(&now, food_timer);
+
+	// Convert to centiseconds for smooth decay calculation
+	long elapsed_centis = elapsed.tv_sec * 100 + elapsed.tv_nsec / 10000000;
+	long total_decay = (elapsed_centis * BONUS_DECAY_PER_SECOND) / 100;
+
+	int current_bonus = POINTS_COUNTER_VALUE - total_decay;
+	if (current_bonus < MIN_POINTS)
+	{
+		current_bonus = MIN_POINTS;
+	}
+	return current_bonus;
+}
+
 void print_centered(WINDOW *window, int y, const char string[])
 {
 	int max_x = getmaxx(window);
@@ -297,7 +421,7 @@ void print_offset(WINDOW *window, int x_offset, int y, const char string[])
 	mvwaddstr(window, y, x + x_offset, string);
 }
 
-void print_status(WINDOW *status_win, GameState *state)
+void print_status(WINDOW *status_win, GameState *state, struct timespec *elapsed)
 {
 	char txt_buf[50];
 	int max_x = getmaxx(status_win);
@@ -319,11 +443,29 @@ void print_status(WINDOW *status_win, GameState *state)
 
 	if (max_x > 50)
 	{
-		// Print score
-		sprintf(txt_buf, "Score: %lld", state->points);
+		// Print bonus (left third, row 1) - dynamically calculated based on time
+		int current_bonus = calculate_current_bonus(&state->food_timer);
+		sprintf(txt_buf, "Bonus: %d", current_bonus);
 		mvwaddstr(status_win, 1, (max_x / 3) - half_len(txt_buf), txt_buf);
 
-		// Print highscore
+		// Print time (right third, row 1) - same format as timer
+		if (elapsed != NULL)
+		{
+			char time_buf[20];
+			format_timespec(time_buf, sizeof(time_buf), elapsed);
+			sprintf(txt_buf, "Time: %s", time_buf);
+		}
+		else
+		{
+			sprintf(txt_buf, "Time: --:--:--");
+		}
+		mvwaddstr(status_win, 1, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
+
+		// Print score (left third, row 2)
+		sprintf(txt_buf, "Score: %lld", state->points);
+		mvwaddstr(status_win, 2, (max_x / 3) - half_len(txt_buf), txt_buf);
+
+		// Print highscore (right third, row 2)
 		if (config->highscore != 0)
 		{
 			sprintf(txt_buf, "Highscore: %lld", config->highscore);
@@ -332,24 +474,17 @@ void print_status(WINDOW *status_win, GameState *state)
 		{
 			sprintf(txt_buf, "No highscore set");
 		}
-		mvwaddstr(status_win, 1, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
-
-		// Print points counter
-		sprintf(txt_buf, "Bonus: %d", state->points_counter);
-		mvwaddstr(status_win, 2, (max_x / 3) - half_len(txt_buf), txt_buf);
-
-		// Print length
-		sprintf(txt_buf, "Length: %d", state->length);
 		mvwaddstr(status_win, 2, (2 * max_x / 3) - half_len(txt_buf), txt_buf);
 	}
 	else
 	{
-		// Print score
-		sprintf(txt_buf, "Score: %lld", state->points);
+		// Print bonus (row 1) - dynamically calculated based on time
+		int current_bonus = calculate_current_bonus(&state->food_timer);
+		sprintf(txt_buf, "Bonus: %d", current_bonus);
 		mvwaddstr(status_win, 1, (max_x / 2) - half_len(txt_buf), txt_buf);
 
-		// Print points counter
-		sprintf(txt_buf, "Bonus: %d", state->points_counter);
+		// Print score (row 2)
+		sprintf(txt_buf, "Score: %lld", state->points);
 		mvwaddstr(status_win, 2, (max_x / 2) - half_len(txt_buf), txt_buf);
 	}
 
@@ -376,6 +511,7 @@ void pause_game(WINDOW *status_win, const char string[], const int seconds)
 	{
 		timeout(-1); // getch is in blocking mode
 		getch();
+		timeout(0); // reset blocking mode
 	}
 	else
 	{
@@ -517,6 +653,22 @@ void free_linked_list(LinkedCell *cell)
 	} while (cell != NULL);
 }
 
+void free_queue(InputQueue *queue)
+{
+	// Nothing valid to free
+	if (queue == NULL)
+		return;
+
+	// Free queue
+	InputQueue *tmp_queue;
+	do
+	{
+		tmp_queue = queue->next;
+		free(queue);
+		queue = tmp_queue;
+	} while (queue != NULL);
+}
+
 int snake_char_from_direction(Direction direction, Direction old_direction)
 {
 	if (direction == UP)
@@ -582,9 +734,9 @@ int snake_char_from_direction(Direction direction, Direction old_direction)
 	return 0;
 }
 
-bool update_position(GameState *state, Coord max_coord)
+bool update_position(GameState *state, Direction direction, Coord max_coord)
 {
-	switch (state->direction)
+	switch (direction)
 	{
 	case UP:
 		state->pos.y--;
@@ -631,55 +783,123 @@ bool update_position(GameState *state, Coord max_coord)
 	}
 }
 
-UserInteraction handle_input(GameState *state)
+UserInteraction pop_current_input(GameState *state)
 {
-	// Set timeout
-	timeout(state->speed);
+	if (state->input_queue != NULL)
+	{
+		UserInteraction input = state->input_queue->input;
+		InputQueue *next = state->input_queue->next;
+		free(state->input_queue);
+		state->input_queue = next;
+		return input;
+	}
+	else
+	{
+		return NO_INPUT;
+	}
+}
 
-	// Getting input
+void check_speed_up(UserInteraction input, GameState *state)
+{
+	if ((input == DIRECTION_LEFT && state->direction == LEFT) ||
+		(input == DIRECTION_RIGHT && state->direction == RIGHT) ||
+		(input == DIRECTION_UP && state->direction == UP) ||
+		(input == DIRECTION_DOWN && state->direction == DOWN))
+	{
+		state->speed_up = true;
+	}
+	else if (input != NO_INPUT)
+	{
+		state->speed_up = false;
+	}
+}
+
+void push_input(UserInteraction input, GameState *state)
+{
+	if (input == NO_INPUT)
+	{
+		return;
+	}
+	InputQueue *new = malloc(sizeof(InputQueue));
+	new->input = input;
+	new->next = NULL;
+
+	if (state->input_queue == NULL)
+	{
+		state->input_queue = new;
+	}
+	else
+	{
+		InputQueue *queue = state->input_queue;
+		while (true)
+		{
+			if (queue->next == NULL)
+			{
+				if (queue->input == input)
+				{
+					// We don't store the same input multiple times
+					return;
+				}
+				else if ((queue->input == DIRECTION_LEFT && input == DIRECTION_RIGHT) ||
+						 (queue->input == DIRECTION_RIGHT && input == DIRECTION_LEFT) ||
+						 (queue->input == DIRECTION_UP && input == DIRECTION_DOWN) ||
+						 (queue->input == DIRECTION_DOWN && input == DIRECTION_UP))
+				{
+					// We don't store opposite directions as they are illegal
+					return;
+				}
+				queue->next = new;
+				return;
+			}
+			else
+			{
+				queue = queue->next;
+			}
+		}
+	}
+}
+
+// Gets the next user input and adds it to the input queue
+void get_input(GameState *state)
+{
 	int key = getch();
-
-	// Save old direction
-	state->old_direction = state->direction;
+	UserInteraction input = NO_INPUT;
 
 	// Changing direction according to the input
 	if (key == config->left_key)
 	{
-		if (state->direction != RIGHT)
-			state->direction = LEFT;
-		return DIRECTION;
+		input = DIRECTION_LEFT;
 	}
 	else if (key == config->right_key)
 	{
-		if (state->direction != LEFT)
-			state->direction = RIGHT;
-		return DIRECTION;
+		input = DIRECTION_RIGHT;
 	}
 	else if (key == config->up_key)
 	{
-		if (state->direction != DOWN)
-			state->direction = UP;
-		return DIRECTION;
+		input = DIRECTION_UP;
 	}
 	else if (key == config->down_key)
 	{
-		if (state->direction != UP)
-			state->direction = DOWN;
-		return DIRECTION;
+		input = DIRECTION_DOWN;
 	}
 	else if (key == '\n') // Enter-key
 	{
-		return PAUSE;
+		input = PAUSE;
 	}
 	else if (key == 'R')
 	{
-		return RESTART;
+		input = RESTART;
 	}
 	else if (key == 'Q')
 	{
-		return QUIT;
+		input = QUIT;
 	}
-	return NONE;
+
+	// Check if double-input in a certain direction happened and enable speed up
+	check_speed_up(input, state);
+
+	// Push input into input queue
+	push_input(input, state);
 }
 
 void paint_objects(WINDOW *game_win, GameState *state)
@@ -700,6 +920,72 @@ void paint_objects(WINDOW *game_win, GameState *state)
 
 UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state)
 {
+	// Update frame delay; either reset it and continue or decrement it and return
+	if (state->frame_delay > 0)
+	{
+		state->frame_delay -= TARGET_FRAME_TIME;
+		return DELAY;
+	}
+	else
+	{
+		state->frame_delay = state->wait_time * NANOSECS_IN_MILLISEC;
+		if (state->speed_up)
+		{
+			state->frame_delay = state->frame_delay / 3;
+		}
+	}
+
+	// Get current input
+	UserInteraction interaction = pop_current_input(state);
+
+	// Handle input that changes the state of the game
+	if (interaction == PAUSE)
+	{
+		return PAUSE_GAME;
+	}
+	else if (interaction == RESTART)
+	{
+		return RESTART_GAME;
+	}
+	else if (interaction == QUIT)
+	{
+		return QUIT_GAME;
+	}
+
+	// Set direction from input
+	Direction direction_from_input = state->grace_direction == HOLD ? state->direction : state->grace_direction;
+	if (interaction == DIRECTION_LEFT && direction_from_input != RIGHT)
+	{
+		direction_from_input = LEFT;
+	}
+	else if (interaction == DIRECTION_RIGHT && direction_from_input != LEFT)
+	{
+		direction_from_input = RIGHT;
+	}
+	else if (interaction == DIRECTION_UP && direction_from_input != DOWN)
+	{
+		direction_from_input = UP;
+	}
+	else if (interaction == DIRECTION_DOWN && direction_from_input != UP)
+	{
+		direction_from_input = DOWN;
+	}
+
+	// No movement, so no update
+	if (direction_from_input == HOLD)
+	{
+		return NO_UPDATE;
+	}
+
+	// First movement, start the timers if they haven't started yet
+	if (is_timespec_zero(&state->round_timer))
+	{
+		struct timespec now;
+		clock_gettime(CLOCK_REALTIME, &now);
+		state->round_timer = now;
+		state->food_timer = now;
+	}
+
 	// Init max coordinates in relation to game window
 	Coord max_coord = get_max_coords(game_win);
 
@@ -707,7 +993,7 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	state->old_pos = state->pos;
 
 	// Update position and check if outer bounds were hit
-	bool wall_hit = update_position(state, max_coord);
+	bool wall_hit = update_position(state, direction_from_input, max_coord);
 
 	// The snake hits something
 	if (wall_hit ||
@@ -725,12 +1011,20 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 			// let the player change the direction
 			state->grace_frames--;
 			state->pos = state->old_pos;
+
+			state->grace_direction = direction_from_input;
+
 			return GRACE;
 		}
 	}
 
-	// Reset grace frames
+	// Reset grace frames and direction
 	state->grace_frames = GRACE_FRAMES;
+	state->grace_direction = HOLD;
+
+	// Update directions
+	state->old_direction = state->direction;
+	state->direction = direction_from_input;
 
 	// Add new head to snake
 	LinkedCell *new_cell = malloc(sizeof(LinkedCell));
@@ -743,21 +1037,27 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 	if ((state->pos.x == state->food_coord.x) &&
 		(state->pos.y == state->food_coord.y))
 	{
+		// Calculate bonus based on elapsed time since food was spawned
+		int current_bonus = calculate_current_bonus(&state->food_timer);
 		// Let the snake grow and change the speed
 		state->growing +=
 			state->superfood_counter == 0 ? SUPERFOOD_GROW_FACTOR : GROW_FACTOR;
-		if (state->speed > config->max_speed)
+		if (state->wait_time > MINIMUM_WAIT_TIME)
 		{
-			state->speed -= SPEED_FACTOR;
+			state->wait_time -= WAIT_TIME_DECREMENT;
 		}
 		state->points +=
-			(state->points_counter +
-			 state->length + (STARTING_SPEED - state->speed) * 5) *
+			(current_bonus +
+			 state->length + (STARTING_WAIT_TIME - state->wait_time) * 5) *
 			(state->superfood_counter == 0 ? 5 : 1);
-		state->points_counter = POINTS_COUNTER_VALUE;
 		state->superfood_counter =
 			(state->superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : state->superfood_counter - 1;
+
+		// Spawn new food
 		new_random_coordinates(state->head, state->wall, &state->food_coord, max_coord);
+
+		// Record when this food was spawned for bonus decay calculation
+		clock_gettime(CLOCK_REALTIME, &state->food_timer);
 	}
 
 	// If the snake is not growing...
@@ -779,12 +1079,6 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 		state->growing--;
 		// ...and increment 'length'
 		state->length++;
-	}
-
-	// Decrement the points that will be added
-	if (state->points_counter > MIN_POINTS)
-	{
-		state->points_counter--;
 	}
 
 	return CONTINUE;
@@ -847,7 +1141,10 @@ GameState init_state(Coord max_coord)
 	// Init gamestate
 	GameState state;
 	state.points = 0;
-	state.speed = STARTING_SPEED;
+	state.direction = HOLD;
+	state.old_direction = HOLD;
+	state.grace_direction = HOLD;
+	state.wait_time = STARTING_WAIT_TIME;
 	state.pos.x = max_coord.x / 2;
 	state.pos.y = max_coord.y / 2;
 	state.old_pos = state.pos;
@@ -855,11 +1152,14 @@ GameState init_state(Coord max_coord)
 	state.length = 1;
 	state.growing = STARTING_LENGTH - 1;
 	state.grace_frames = GRACE_FRAMES;
-	state.direction = HOLD;
-	state.old_direction = HOLD;
 	state.superfood_counter = SUPERFOOD_COUNTER_VALUE;
 	state.food_coord.x = 0;
 	state.food_coord.y = 0;
+	state.frame_delay = 0;
+	state.input_queue = NULL;
+	state.speed_up = false;
+	set_timespec_zero(&state.round_timer);
+	set_timespec_zero(&state.food_timer);
 
 	// Create first cell for the snake
 	LinkedCell *head = malloc(sizeof(LinkedCell));
@@ -900,11 +1200,8 @@ bool play_round(void)
 	bool did_loose = false;
 	bool should_repeat = false;
 
-	// Set initial timeout
-	timeout(state.speed); // The timeout for getch() makes up the game speed
-
 	// Print status window since points have been set to 0
-	print_status(status_win, &state);
+	print_status(status_win, &state, NULL);
 
 	if (state.wall != NULL)
 	{
@@ -927,37 +1224,29 @@ bool play_round(void)
 	// Game-Loop
 	while (true)
 	{
+		// Start timer
+		struct timespec start_timer, end_timer, current_time, elapsed;
+		clock_gettime(CLOCK_REALTIME, &start_timer);
+
+		// Calculate elapsed time for timer display (only if timer has started)
+		bool timer_started = !is_timespec_zero(&state.round_timer);
+		if (timer_started)
+		{
+			clock_gettime(CLOCK_REALTIME, &current_time);
+			elapsed = subtract_timespec(&current_time, &state.round_timer);
+		}
+
 		// Paint snake head and food
 		paint_objects(game_win, &state);
 
 		// Update status window
-		print_status(status_win, &state);
+		print_status(status_win, &state, timer_started ? &elapsed : NULL);
 
 		// Refresh game window
 		wrefresh(game_win);
 
 		// Get input
-		UserInteraction interact = handle_input(&state);
-		if (interact == PAUSE)
-		{
-			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
-			pause_game(status_win, "--- PAUSED ---", 0);
-		}
-		else if (interact == RESTART)
-		{
-			should_repeat = true;
-			break;
-		}
-		else if (interact == QUIT)
-		{
-			clean_exit(0);
-		}
-
-		// No movement, so no update
-		if (state.direction == HOLD)
-		{
-			continue;
-		}
+		get_input(&state);
 
 		// Update game state
 		UpdateResult res = update_state(game_win, status_win, &state);
@@ -966,6 +1255,44 @@ bool play_round(void)
 			did_loose = true;
 			break;
 		}
+		else if (res == PAUSE_GAME)
+		{
+			wattrset(status_win, COLOR_PAIR(4) | A_BOLD);
+
+			// Record when the pause starts so we can calculate pause duration
+			struct timespec pause_start_time;
+			clock_gettime(CLOCK_REALTIME, &pause_start_time);
+
+			// Do the actual pause
+			pause_game(status_win, "--- PAUSED ---", 0);
+
+			// Record time when game was resumed
+			struct timespec resume_time;
+			clock_gettime(CLOCK_REALTIME, &resume_time);
+
+			// Calculate duration of pause
+			struct timespec pause_duration = subtract_timespec(&resume_time, &pause_start_time);
+
+			// Adjust both timers forward by pause duration so displayed time
+			// and bonus decay do not include time spent paused
+			add_timespec(&state.round_timer, &pause_duration);
+			add_timespec(&state.food_timer, &pause_duration);
+		}
+		else if (res == RESTART_GAME)
+		{
+			should_repeat = true;
+			break;
+		}
+		else if (res == QUIT_GAME)
+		{
+			clean_exit(0);
+		}
+
+		// End timer
+		clock_gettime(CLOCK_REALTIME, &end_timer);
+
+		// Delay game loop to achieve target frame rate
+		delay_frame(&start_timer, &end_timer);
 	}
 
 	// Set a new highscore
@@ -1000,6 +1327,9 @@ bool play_round(void)
 
 	// Freeing memory used for the walls
 	free_linked_list(state.wall);
+
+	// Free remaining input queue
+	free_queue(state.input_queue);
 
 	// Delete windows
 	delwin(game_win);
@@ -1160,6 +1490,9 @@ show:
 		switch (index)
 		{
 		case 0:
+			// Deactivate timeout for getch
+			timeout(0);
+			// Start game
 			play_game();
 			break;
 		case 1:
@@ -1203,22 +1536,12 @@ void parse_arguments(int argc, char **argv)
 			{"vim", no_argument, &vim_flag, true},
 			{"color", required_argument, NULL, 'c'},
 			{"walls", required_argument, NULL, 'w'},
-			{"filepath", required_argument, NULL, 'f'},
-			{"maximum-speed", required_argument, NULL, 1},
-		};
+			{"filepath", required_argument, NULL, 'f'}};
 
 	while ((arg = getopt_long(argc, argv, "osif:rw:c:hv", long_opts, &option_index)) != -1)
 	{
 		switch (arg)
 		{
-		case 1:
-			int_arg = atoi(optarg);
-			if (in_range(int_arg, 0, 150))
-			{
-				config->max_speed = 150 - int_arg;
-				break;
-			}
-			goto help_text;
 		case 'o':
 			config->open_bounds_flag = true;
 			break;
@@ -1255,7 +1578,7 @@ void parse_arguments(int argc, char **argv)
 			{
 				config->snake_color = int_arg;
 				break;
-			}	  // else pass to help information
+			} // else pass to help information
 		case '?': // Invalid parameter
 				  // pass to help information
 		case 'h':
@@ -1270,7 +1593,6 @@ void parse_arguments(int argc, char **argv)
 			printf(" --ignore-savefile, -i\n\tIgnore savefile (don't read nor write)\n");
 			printf(" --filepath path, -f path\n\tSpecify alternate path savefile\n");
 			printf(" --vim\n\tUse vim-style direction controls (H,J,K,L)\n");
-			printf(" --maximum-speed <0,150>\n\tSpecify a new maximum speed (default: 100)\n");
 			printf(" --help, -h\n\tDisplay this information\n");
 			printf(" --version, -v\n\tDisplay version and license information\n\n");
 			printf("In-game Controls:\n");
