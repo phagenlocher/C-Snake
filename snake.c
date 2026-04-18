@@ -553,8 +553,7 @@ void new_random_coordinates(
 	LinkedCell *snake,
 	LinkedCell *wall,
 	Coord *coord,
-	Coord max_coords,
-	struct timespec *food_timer)
+	Coord max_coords)
 {
 	int x, y;
 	do
@@ -570,12 +569,6 @@ void new_random_coordinates(
 	// Save coordinates
 	coord->x = x;
 	coord->y = y;
-
-	// Record when this food was spawned for bonus decay calculation
-	if (food_timer != NULL)
-	{
-		clock_gettime(CLOCK_REALTIME, food_timer);
-	}
 }
 
 LinkedCell *create_wall(int start, int end, int constant, Direction dir, LinkedCell *last_cell)
@@ -1059,7 +1052,12 @@ UpdateResult update_state(WINDOW *game_win, WINDOW *status_win, GameState *state
 			(state->superfood_counter == 0 ? 5 : 1);
 		state->superfood_counter =
 			(state->superfood_counter == 0) ? SUPERFOOD_COUNTER_VALUE : state->superfood_counter - 1;
-		new_random_coordinates(state->head, state->wall, &state->food_coord, max_coord, &state->food_timer);
+
+		// Spawn new food
+		new_random_coordinates(state->head, state->wall, &state->food_coord, max_coord);
+
+		// Record when this food was spawned for bonus decay calculation
+		clock_gettime(CLOCK_REALTIME, &state->food_timer);
 	}
 
 	// If the snake is not growing...
@@ -1223,8 +1221,8 @@ bool play_round(void)
 		} while (tmp_cell2 != NULL);
 	}
 
-	// Init food coordinates (pass NULL for food_timer so timer doesn't start yet)
-	new_random_coordinates(state.head, state.wall, &state.food_coord, max_coord, NULL);
+	// Init food coordinates
+	new_random_coordinates(state.head, state.wall, &state.food_coord, max_coord);
 
 	// Game-Loop
 	while (true)
